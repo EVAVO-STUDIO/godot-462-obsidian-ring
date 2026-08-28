@@ -24,7 +24,7 @@ $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
     'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd','scripts/match_substitution_director.gd',
-    'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
+    'tools/runtime_self_test.gd','data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
 foreach ($RelativePath in $Required) {
@@ -137,9 +137,15 @@ foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reas
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
-    Write-Warning 'Godot executable not found. Structural/data/director/save validation passed; engine smoke test skipped.'
+    Write-Warning 'Godot executable not found. Structural/data/director/save validation passed; runtime self-test and engine smoke test skipped.'
     exit 0
 }
+
+Write-Host 'Running deterministic runtime rules self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/runtime_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with exit code $LASTEXITCODE" }
+
+Write-Host 'Running Godot editor smoke test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --editor --quit
 if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
 Write-Host 'Obsidian Ring validation passed.' -ForegroundColor Green
