@@ -13,6 +13,7 @@ MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"
 ConditionDirector="*res://scripts/condition_director.gd"
 FatigueDirector="*res://scripts/fatigue_director.gd"
 CourtHazardDirector="*res://scripts/court_hazard_director.gd"
+CourtGeometryDirector="*res://scripts/court_geometry_director.gd"
 
 [display]
 window/size/viewport_width=640
