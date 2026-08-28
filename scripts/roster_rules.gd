@@ -7,17 +7,24 @@ static func roster_for_team(rosters: Array, team_id: String) -> Dictionary:
 			return roster
 	return {}
 
+static func _available(player: Dictionary) -> bool:
+	return int(player.get("injury_matches", 0)) <= 0 and int(player.get("suspension_matches", 0)) <= 0
+
 static func ordered_players(roster: Dictionary) -> Array:
-	var healthy: Array = []
-	var injured: Array = []
+	var available: Array = []
+	var unavailable: Array = []
 	for player in roster.get("players", []):
-		if int(player.get("injury_matches", 0)) > 0:
-			injured.append(player)
+		if _available(player):
+			available.append(player)
 		else:
-			healthy.append(player)
-	healthy.sort_custom(func(a, b): return int(a.get("skill", 1)) > int(b.get("skill", 1)))
-	injured.sort_custom(func(a, b): return int(a.get("injury_matches", 0)) < int(b.get("injury_matches", 0)))
-	return healthy + injured
+			unavailable.append(player)
+	available.sort_custom(func(a, b): return int(a.get("skill", 1)) > int(b.get("skill", 1)))
+	unavailable.sort_custom(func(a, b):
+		var a_wait := int(a.get("injury_matches", 0)) + int(a.get("suspension_matches", 0))
+		var b_wait := int(b.get("injury_matches", 0)) + int(b.get("suspension_matches", 0))
+		return a_wait < b_wait
+	)
+	return available + unavailable
 
 static func active_three(roster: Dictionary) -> Array:
 	var ordered := ordered_players(roster)
@@ -28,9 +35,9 @@ static func active_three(roster: Dictionary) -> Array:
 			if active.size() >= 3:
 				break
 			var player_id := str(player.get("id", ""))
-			if used_ids.has(player_id):
+			if used_ids.has(player_id) or not _available(player):
 				continue
-			if str(player.get("role", "")) == preferred_role and int(player.get("injury_matches", 0)) <= 0:
+			if str(player.get("role", "")) == preferred_role:
 				active.append(player)
 				used_ids[player_id] = true
 				break
@@ -38,7 +45,7 @@ static func active_three(roster: Dictionary) -> Array:
 		if active.size() >= 3:
 			break
 		var player_id := str(player.get("id", ""))
-		if not used_ids.has(player_id):
+		if not used_ids.has(player_id) and _available(player):
 			active.append(player)
 			used_ids[player_id] = true
 	return active
@@ -57,12 +64,15 @@ static func bench(roster: Dictionary) -> Array:
 static func substitute(active: Array, bench_players: Array, active_index: int, bench_index: int) -> Dictionary:
 	if active_index < 0 or active_index >= active.size() or bench_index < 0 or bench_index >= bench_players.size():
 		return {"changed":false,"active":active,"bench":bench_players,"reason":"INVALID_SELECTION"}
-	if int(bench_players[bench_index].get("injury_matches", 0)) > 0:
+	var incoming: Dictionary = bench_players[bench_index]
+	if int(incoming.get("injury_matches", 0)) > 0:
 		return {"changed":false,"active":active,"bench":bench_players,"reason":"PLAYER_INJURED"}
+	if int(incoming.get("suspension_matches", 0)) > 0:
+		return {"changed":false,"active":active,"bench":bench_players,"reason":"PLAYER_SUSPENDED"}
 	var next_active := active.duplicate(true)
 	var next_bench := bench_players.duplicate(true)
 	var outgoing = next_active[active_index]
-	next_active[active_index] = next_bench[bench_index]
+	next_active[active_index] = incoming
 	next_bench[bench_index] = outgoing
 	return {"changed":true,"active":next_active,"bench":next_bench,"reason":"SUBSTITUTED"}
 
@@ -72,6 +82,8 @@ static func training_cost(base_cost: int, skill: int) -> int:
 static func train_player(player: Dictionary, funds: int, base_cost: int) -> Dictionary:
 	if int(player.get("injury_matches", 0)) > 0:
 		return {"changed":false,"player":player,"funds":funds,"reason":"PLAYER_INJURED"}
+	if int(player.get("suspension_matches", 0)) > 0:
+		return {"changed":false,"player":player,"funds":funds,"reason":"PLAYER_SUSPENDED"}
 	var skill := int(player.get("skill", 1))
 	if skill >= 10:
 		return {"changed":false,"player":player,"funds":funds,"reason":"MAX_SKILL"}
