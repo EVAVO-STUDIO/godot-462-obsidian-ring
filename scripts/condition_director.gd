@@ -4,6 +4,10 @@ const ConditionRules = preload("res://scripts/condition_rules.gd")
 
 var _scene_id := 0
 var _last_phase := -1
+var _played_stamina_by_id: Dictionary = {}
+
+func _ready() -> void:
+	process_priority = 150
 
 func _process(_delta: float) -> void:
 	var scene := get_tree().current_scene
@@ -14,10 +18,15 @@ func _process(_delta: float) -> void:
 	if scene_id != _scene_id:
 		_scene_id = scene_id
 		_last_phase = phase
+		_played_stamina_by_id.clear()
 		return
 
 	if phase == 1 and _last_phase != 1:
+		_played_stamina_by_id.clear()
 		_apply_starting_condition(scene)
+		_capture_participants(scene)
+	elif phase == 1:
+		_capture_participants(scene)
 	elif phase == 2 and _last_phase == 1:
 		_capture_end_condition(scene)
 	_last_phase = phase
@@ -46,10 +55,12 @@ func _apply_team_start(scene: Object, property_name: String) -> void:
 		players[i] = player
 	scene.set(property_name, players)
 
+func _capture_participants(scene: Object) -> void:
+	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("home_players"))
+	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("away_players"))
+
 func _capture_end_condition(scene: Object) -> void:
-	var played: Dictionary = {}
-	_capture_live_team(scene.get("home_players"), played)
-	_capture_live_team(scene.get("away_players"), played)
+	_capture_participants(scene)
 	var rosters: Array = scene.get("roster_state")
 	for ri in range(rosters.size()):
 		var roster: Dictionary = rosters[ri]
@@ -57,24 +68,14 @@ func _capture_end_condition(scene: Object) -> void:
 		for pi in range(players.size()):
 			var spec: Dictionary = players[pi]
 			var id := str(spec.get("id", ""))
-			if played.has(id):
-				spec["fatigue_carry"] = ConditionRules.carry_from_end_stamina(float(played[id]))
+			if _played_stamina_by_id.has(id):
+				spec["fatigue_carry"] = ConditionRules.carry_from_end_stamina(float(_played_stamina_by_id[id]))
 			else:
 				spec["fatigue_carry"] = ConditionRules.recover_bench_carry(int(spec.get("fatigue_carry", 0)))
 			players[pi] = spec
 		roster["players"] = players
 		rosters[ri] = roster
 	scene.set("roster_state", rosters)
-
-func _capture_live_team(players, output: Dictionary) -> void:
-	if typeof(players) != TYPE_ARRAY:
-		return
-	for player in players:
-		if typeof(player) != TYPE_DICTIONARY:
-			continue
-		var id := str(player.get("id", ""))
-		if id != "":
-			output[id] = float(player.get("stamina", 100.0))
 
 func _carry_map(rosters) -> Dictionary:
 	var result: Dictionary = {}
