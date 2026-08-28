@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "rounds": [
     {"round":1,"fixtures":[{"home":"jaguar_house","away":"quetzal_runners"},{"home":"obsidian_guard","away":"sun_serpents"}]},
     {"round":2,"fixtures":[{"home":"jaguar_house","away":"obsidian_guard"},{"home":"sun_serpents","away":"quetzal_runners"}]},
@@ -8,8 +8,8 @@
     {"round":5,"fixtures":[{"home":"obsidian_guard","away":"jaguar_house"},{"home":"quetzal_runners","away":"sun_serpents"}]},
     {"round":6,"fixtures":[{"home":"jaguar_house","away":"sun_serpents"},{"home":"obsidian_guard","away":"quetzal_runners"}]},
     {"round":7,"fixtures":[{"home":"jaguar_house","away":"quetzal_runners"},{"home":"obsidian_guard","away":"sun_serpents"}]},
-    {"round":8,"fixtures":[{"home":"jaguar_house","away":"obsidian_guard"},{"home":"sun_serpents","away":"quetzal_runners"}]},
-    {"round":9,"fixtures":[{"home":"sun_serpents","away":"jaguar_house"},{"home":"quetzal_runners","away":"obsidian_guard"}]},
+    {"round":8,"fixtures":[{"home":"obsidian_guard","away":"jaguar_house"},{"home":"sun_serpents","away":"quetzal_runners"}]},
+    {"round":9,"fixtures":[{"home":"jaguar_house","away":"sun_serpents"},{"home":"quetzal_runners","away":"obsidian_guard"}]},
     {"round":10,"fixtures":[{"home":"quetzal_runners","away":"jaguar_house"},{"home":"sun_serpents","away":"obsidian_guard"}]}
   ]
 }
