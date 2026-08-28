@@ -1,12 +1,14 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "league": {
     "season_rounds": 10,
     "win_points": 3,
     "draw_points": 1,
     "loss_points": 0,
     "playoff_teams": 4,
-    "starting_funds": 1800
+    "starting_funds": 1800,
+    "booking_threshold": 3,
+    "suspension_matches": 1
   },
   "career": {
     "injury_recovery_between_matches": 18,
@@ -16,5 +18,11 @@
     "draw_purse": 250,
     "ring_shot_bonus": 75,
     "clean_match_bonus": 100
+  },
+  "playoffs": {
+    "enabled": true,
+    "semifinal_pairing": "1v4_2v3",
+    "draw_tiebreak": "table_seed",
+    "championship_purse": 1400
   }
 }
