@@ -1,7 +1,7 @@
 extends Node
 
 const SAVE_PATH := "user://obsidian_ring_season.json"
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const SAVE_INTERVAL := 1.0
 const MAX_FUNDS := 99999999
 
@@ -132,13 +132,45 @@ func _sanitize_rosters(scene: Object, saved) -> Array:
 		result.append({"team_id": team_id, "players": next_players})
 	return result if result.size() == valid_team_ids.size() else scene.get("roster_state")
 
+func _postseason_snapshot() -> Dictionary:
+	var director := get_node_or_null("/root/SeasonDirector")
+	if director == null:
+		return {"semifinal_winners": [], "champion_id": "", "championship_purse_paid": false}
+	var winners = director.get("_semifinal_winners")
+	return {
+		"semifinal_winners": winners.duplicate(true) if typeof(winners) == TYPE_ARRAY else [],
+		"champion_id": str(director.get("_champion_id")),
+		"championship_purse_paid": bool(director.get("_championship_purse_paid"))
+	}
+
+func _sanitize_postseason(scene: Object, saved) -> Dictionary:
+	var valid_ids := _valid_team_ids(scene)
+	var winners: Array = []
+	if typeof(saved) == TYPE_DICTIONARY:
+		var raw_winners = saved.get("semifinal_winners", [])
+		if typeof(raw_winners) == TYPE_ARRAY:
+			for raw_id in raw_winners:
+				var id := str(raw_id)
+				if valid_ids.has(id) and id not in winners and winners.size() < 2:
+					winners.append(id)
+		var champion := str(saved.get("champion_id", ""))
+		if champion != "" and not valid_ids.has(champion):
+			champion = ""
+		return {
+			"semifinal_winners": winners,
+			"champion_id": champion,
+			"championship_purse_paid": bool(saved.get("championship_purse_paid", false)) and champion != ""
+		}
+	return {"semifinal_winners": [], "champion_id": "", "championship_purse_paid": false}
+
 func _snapshot(scene: Object) -> Dictionary:
 	return {
 		"version": SAVE_VERSION,
 		"funds": clampi(int(scene.get("funds")), 0, MAX_FUNDS),
 		"match_number": maxi(1, int(scene.get("match_number"))),
 		"league_table": scene.get("league_table"),
-		"roster_state": scene.get("roster_state")
+		"roster_state": scene.get("roster_state"),
+		"postseason": _postseason_snapshot()
 	}
 
 func _signature(scene: Object) -> String:
@@ -158,15 +190,30 @@ func _restore(scene: Object) -> void:
 	if file == null:
 		return
 	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("version", -1)) != SAVE_VERSION:
-		push_warning("Obsidian Ring save ignored because it is invalid or from an unsupported version.")
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("Obsidian Ring save ignored because it is invalid.")
+		return
+	var version := int(parsed.get("version", -1))
+	if version < 2 or version > SAVE_VERSION:
+		push_warning("Obsidian Ring save ignored because it is from an unsupported version.")
 		return
 	scene.set("funds", clampi(int(parsed.get("funds", scene.get("funds"))), 0, MAX_FUNDS))
 	var max_reasonable_round := _season_rounds(scene) + 3
 	scene.set("match_number", clampi(int(parsed.get("match_number", scene.get("match_number"))), 1, max_reasonable_round))
 	scene.set("league_table", _sanitize_table(scene, parsed.get("league_table", [])))
 	scene.set("roster_state", _sanitize_rosters(scene, parsed.get("roster_state", [])))
+	if version >= 3:
+		var postseason := _sanitize_postseason(scene, parsed.get("postseason", {}))
+		call_deferred("_restore_postseason_deferred", postseason)
 	if scene.has_method("_apply_match_identity"):
 		scene.call("_apply_match_identity")
 	if scene.has_method("_prepare_match"):
 		scene.call("_prepare_match")
+
+func _restore_postseason_deferred(postseason: Dictionary) -> void:
+	var director := get_node_or_null("/root/SeasonDirector")
+	if director == null:
+		return
+	director.set("_semifinal_winners", postseason.get("semifinal_winners", []).duplicate(true))
+	director.set("_champion_id", str(postseason.get("champion_id", "")))
+	director.set("_championship_purse_paid", bool(postseason.get("championship_purse_paid", false)))
