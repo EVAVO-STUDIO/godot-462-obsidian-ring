@@ -1,7 +1,7 @@
 extends Node
 
 const SAVE_PATH := "user://obsidian_ring_season.json"
-const SAVE_VERSION := 1
+const SAVE_VERSION := 2
 const SAVE_INTERVAL := 1.0
 
 var _restored := false
@@ -33,7 +33,7 @@ func _notification(what: int) -> void:
 			_save(scene)
 
 func _supports_season_state(scene: Object) -> bool:
-	var required := ["funds", "match_number", "league_table"]
+	var required := ["funds", "match_number", "league_table", "roster_state"]
 	var names: Dictionary = {}
 	for property in scene.get_property_list():
 		names[str(property.get("name", ""))] = true
@@ -47,7 +47,8 @@ func _snapshot(scene: Object) -> Dictionary:
 		"version": SAVE_VERSION,
 		"funds": maxi(0, int(scene.get("funds"))),
 		"match_number": maxi(1, int(scene.get("match_number"))),
-		"league_table": scene.get("league_table")
+		"league_table": scene.get("league_table"),
+		"roster_state": scene.get("roster_state")
 	}
 
 func _signature(scene: Object) -> String:
@@ -75,5 +76,10 @@ func _restore(scene: Object) -> void:
 	var table = parsed.get("league_table", [])
 	if typeof(table) == TYPE_ARRAY and not table.is_empty():
 		scene.set("league_table", table)
+	var saved_rosters = parsed.get("roster_state", [])
+	if typeof(saved_rosters) == TYPE_ARRAY and not saved_rosters.is_empty():
+		scene.set("roster_state", saved_rosters)
 	if scene.has_method("_apply_match_identity"):
 		scene.call("_apply_match_identity")
+	if scene.has_method("_prepare_match"):
+		scene.call("_prepare_match")
