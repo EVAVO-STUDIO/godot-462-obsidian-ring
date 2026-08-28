@@ -61,6 +61,20 @@ static func bench(roster: Dictionary) -> Array:
 			result.append(player)
 	return result
 
+static func best_substitute_candidate(bench_players: Array, active_ids: Dictionary, used_ids: Dictionary, preferred_role: String) -> Dictionary:
+	var role_match: Dictionary = {}
+	var fallback: Dictionary = {}
+	for spec in bench_players:
+		var id := str(spec.get("id", ""))
+		if id == "" or active_ids.has(id) or used_ids.has(id) or not _available(spec):
+			continue
+		if fallback.is_empty() or int(spec.get("skill", 1)) > int(fallback.get("skill", 1)):
+			fallback = spec
+		if str(spec.get("role", "")) == preferred_role:
+			if role_match.is_empty() or int(spec.get("skill", 1)) > int(role_match.get("skill", 1)):
+				role_match = spec
+	return role_match if not role_match.is_empty() else fallback
+
 static func substitute(active: Array, bench_players: Array, active_index: int, bench_index: int) -> Dictionary:
 	if active_index < 0 or active_index >= active.size() or bench_index < 0 or bench_index >= bench_players.size():
 		return {"changed":false,"active":active,"bench":bench_players,"reason":"INVALID_SELECTION"}
