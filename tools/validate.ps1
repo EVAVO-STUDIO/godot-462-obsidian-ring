@@ -22,13 +22,13 @@ function Assert-UniqueIds($Collection, [string]$Label) {
 Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
-    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
+    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/roster_save_rules.gd',
     'scripts/discipline_rules.gd','scripts/discipline_policy_director.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
     'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
-    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd','tools/discipline_policy_self_test.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd','tools/discipline_policy_self_test.gd','tools/persistence_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -140,10 +140,12 @@ $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_directo
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
 $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
 foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) { if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" } }
+$RosterSaveText = Get-Content -Raw (Join-Path $Root 'scripts/roster_save_rules.gd')
+foreach ($Token in @('merge_rosters','MUTABLE_FIELDS','fatigue_carry','suspension_until_round')) { if (-not $RosterSaveText.Contains($Token)) { throw "Roster save rules missing token: $Token" } }
 $ConditionRulesText = Get-Content -Raw (Join-Path $Root 'scripts/condition_rules.gd')
-foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina')) { if (-not $ConditionRulesText.Contains($Token)) { throw "Condition rules missing token: $Token" } }
+foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina','capture_stamina')) { if (-not $ConditionRulesText.Contains($Token)) { throw "Condition rules missing token: $Token" } }
 $ConditionDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/condition_director.gd')
-foreach ($Token in @('_capture_end_condition','_apply_starting_condition','fatigue_carry','ConditionRules.starting_stamina')) { if (-not $ConditionDirectorText.Contains($Token)) { throw "Condition director missing token: $Token" } }
+foreach ($Token in @('process_priority = 150','_played_stamina_by_id','_capture_participants','ConditionRules.capture_stamina','_capture_end_condition','ConditionRules.starting_stamina')) { if (-not $ConditionDirectorText.Contains($Token)) { throw "Condition director missing participant token: $Token" } }
 $FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
 foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) { if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" } }
 $HazardRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_rules.gd')
@@ -167,7 +169,7 @@ foreach ($Token in @('user_qualified','terminal_reason','NO_PLAYOFF_BERTH','SEMI
 $SeasonEndDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_director.gd')
 foreach ($Token in @('process_priority = -100','action_erase_events','_semifinal_winners','_champion_id','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('SAVE_VERSION := 3','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred','version < 2','fatigue_carry')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing v3 canonical-state token: $Token" } }
+foreach ($Token in @('SAVE_VERSION := 3','RosterSaveRules.merge_rosters','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred','version < 2')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing canonical-state token: $Token" } }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
@@ -180,6 +182,9 @@ if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with ex
 Write-Host 'Running discipline policy self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/discipline_policy_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring discipline policy self-test failed with exit code $LASTEXITCODE" }
+Write-Host 'Running persistence self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/persistence_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring persistence self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running court hazard/geometry self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/court_hazard_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring court self-test failed with exit code $LASTEXITCODE" }
