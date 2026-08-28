@@ -23,8 +23,9 @@ Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
-    'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd','scripts/match_substitution_director.gd',
-    'tools/runtime_self_test.gd','data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
+    'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
+    'scripts/match_substitution_director.gd','scripts/fatigue_director.gd','tools/runtime_self_test.gd',
+    'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
 foreach ($RelativePath in $Required) {
@@ -118,17 +119,22 @@ $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 foreach ($Autoload in @(
     'SeasonSave="*res://scripts/season_save.gd"',
     'SeasonDirector="*res://scripts/season_director.gd"',
-    'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"'
+    'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"',
+    'FatigueDirector="*res://scripts/fatigue_director.gd"'
 )) {
     if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
 }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) {
+foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2','season_rounds')) {
     if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" }
 }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
-foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','_substitute_controlled_player','suspension_matches')) {
+foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','_substitute_player','suspension_matches')) {
     if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" }
+}
+$FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
+foreach ($Token in @('LOW_STAMINA_THRESHOLD','CRITICAL_STAMINA_THRESHOLD','base_speed_mult','request_emergency_substitution','performance_factor_for_stamina')) {
+    if (-not $FatigueText.Contains($Token)) { throw "FatigueDirector missing token: $Token" }
 }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
 foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round')) {
