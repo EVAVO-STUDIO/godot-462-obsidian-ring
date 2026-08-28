@@ -1,0 +1,30 @@
+{
+  "rulesets": [
+    {
+      "id": "arcade_90s",
+      "name": "Arcade 90s",
+      "match_seconds": 180,
+      "ring_points": 5,
+      "wall_points": 1,
+      "tackle_stamina_cost": 14,
+      "power_strike_stamina_cost": 10,
+      "injuries_enabled": true,
+      "fouls_enabled": true,
+      "substitutions_enabled": true,
+      "description": "Fast, physical arcade rules inspired by 1990s future-sports pacing, using an original Mesoamerican-inspired court and scoring system."
+    },
+    {
+      "id": "tournament",
+      "name": "Tournament",
+      "match_seconds": 240,
+      "ring_points": 5,
+      "wall_points": 1,
+      "tackle_stamina_cost": 16,
+      "power_strike_stamina_cost": 12,
+      "injuries_enabled": true,
+      "fouls_enabled": true,
+      "substitutions_enabled": true,
+      "description": "Longer competitive matches with stronger stamina management and stricter contact penalties."
+    }
+  ]
+}
