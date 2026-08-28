@@ -3,6 +3,7 @@ extends Node2D
 const ContentCatalog = preload("res://scripts/content_catalog.gd")
 const MatchRules = preload("res://scripts/match_rules.gd")
 const TeamPlayRules = preload("res://scripts/team_play_rules.gd")
+const LeagueRules = preload("res://scripts/league_rules.gd")
 const PLAYER_SPEED := 185.0
 const AI_SPEED := 132.0
 const COURT := Rect2(70.0, 62.0, 500.0, 250.0)
@@ -28,16 +29,26 @@ var last_score_text := "FIRST BALL"
 var score_banner_timer := 2.0
 var home_team_name := "JAGUAR HOUSE"
 var away_team_name := "QUETZAL RUNNERS"
+var home_team_id := "jaguar_house"
+var away_team_id := "quetzal_runners"
 var court_name := "STONE COURT"
 var result_text := ""
+var status_text := ""
+var status_timer := 0.0
 var funds := 0
 var match_number := 1
+var home_fouls := 0
+var away_fouls := 0
+var home_ring_shots := 0
+var away_ring_shots := 0
 var home_players: Array = []
 var away_players: Array = []
 var teams: Array = []
 var rulesets: Array = []
 var courts: Array = []
+var role_profiles: Array = []
 var league: Dictionary = {}
+var league_table: Array = []
 
 func _ready() -> void:
 	_configure_input()
@@ -46,6 +57,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	status_timer = maxf(0.0, status_timer - delta)
 	match phase:
 		GamePhase.TITLE:
 			if Input.is_action_just_pressed("confirm"): _start_match()
@@ -65,9 +77,12 @@ func _process(delta: float) -> void:
 func _update_match(delta: float) -> void:
 	match_time = maxf(0.0, match_time - delta)
 	if match_time <= 0.0:
-		_finish_match(); return
+		_finish_match()
+		return
 	tackle_timer = maxf(0.0, tackle_timer - delta)
 	score_banner_timer = maxf(0.0, score_banner_timer - delta)
+	_tick_injuries(home_players, delta)
+	_tick_injuries(away_players, delta)
 	_update_controlled_player(delta)
 	_update_team_ai(home_players, true, delta)
 	_update_team_ai(away_players, false, delta)
@@ -81,6 +96,7 @@ func _load_content() -> void:
 	var rules_data = ContentCatalog.load_json("res://data/rules.json")
 	var courts_data = ContentCatalog.load_json("res://data/courts.json")
 	var league_data = ContentCatalog.load_json("res://data/league.json")
+	var roles_data = ContentCatalog.load_json("res://data/player_roles.json")
 	if typeof(teams_data) == TYPE_DICTIONARY: teams = teams_data.get("teams", [])
 	if typeof(rules_data) == TYPE_DICTIONARY:
 		rulesets = rules_data.get("rulesets", [])
@@ -90,32 +106,77 @@ func _load_content() -> void:
 			ring_points = int(active.get("ring_points", ring_points))
 			wall_points = int(active.get("wall_points", wall_points))
 	if typeof(courts_data) == TYPE_DICTIONARY: courts = courts_data.get("courts", [])
+	if typeof(roles_data) == TYPE_DICTIONARY: role_profiles = roles_data.get("roles", [])
 	if typeof(league_data) == TYPE_DICTIONARY:
 		league = league_data
 		funds = int(league.get("league", {}).get("starting_funds", 0))
+	league_table = LeagueRules.make_table(teams)
 	_apply_match_identity()
 
+func _team_for_id(id: String) -> Dictionary:
+	for team in teams:
+		if str(team.get("id", "")) == id: return team
+	return {}
+
+func _role_profile(role: String) -> Dictionary:
+	for profile in role_profiles:
+		if str(profile.get("id", "")) == role: return profile
+	return {"speed":1.0,"stamina":1.0,"tackle":1.0,"passing":1.0,"shooting":1.0,"toughness":5}
+
 func _apply_match_identity() -> void:
-	if not teams.is_empty(): home_team_name = str(teams[0].get("name", home_team_name)).to_upper()
+	if not teams.is_empty():
+		home_team_name = str(teams[0].get("name", home_team_name)).to_upper()
+		home_team_id = str(teams[0].get("id", home_team_id))
 	if teams.size() > 1:
 		var away_index := 1 + ((match_number - 1) % (teams.size() - 1))
 		away_team_name = str(teams[away_index].get("name", away_team_name)).to_upper()
+		away_team_id = str(teams[away_index].get("id", away_team_id))
 	if not courts.is_empty():
 		var active_court: Dictionary = courts[(match_number - 1) % courts.size()]
 		court_name = str(active_court.get("name", court_name)).to_upper()
 		wall_rebound = float(active_court.get("rebound", wall_rebound))
 
 func _prepare_match() -> void:
-	home_score = 0; away_score = 0; match_time = match_length
-	last_score_text = "FIRST BALL"; score_banner_timer = 2.0; controlled_home_index = 0
-	_spawn_rosters(); _reset_ball(false)
+	home_score = 0
+	away_score = 0
+	match_time = match_length
+	home_fouls = 0
+	away_fouls = 0
+	home_ring_shots = 0
+	away_ring_shots = 0
+	last_score_text = "FIRST BALL"
+	score_banner_timer = 2.0
+	controlled_home_index = 0
+	_spawn_rosters()
+	_reset_ball(false)
 
 func _spawn_rosters() -> void:
-	home_players = [_make_player(Vector2(205,135),"runner"), _make_player(Vector2(225,190),"striker"), _make_player(Vector2(205,245),"guard")]
-	away_players = [_make_player(Vector2(435,135),"runner"), _make_player(Vector2(415,190),"striker"), _make_player(Vector2(435,245),"guard")]
+	var home_team := _team_for_id(home_team_id)
+	var away_team := _team_for_id(away_team_id)
+	home_players = [_make_player(Vector2(205,135),"runner",home_team), _make_player(Vector2(225,190),"striker",home_team), _make_player(Vector2(205,245),"guard",home_team)]
+	away_players = [_make_player(Vector2(435,135),"runner",away_team), _make_player(Vector2(415,190),"striker",away_team), _make_player(Vector2(435,245),"guard",away_team)]
 
-func _make_player(position: Vector2, role: String) -> Dictionary:
-	return {"position":position,"stamina":100.0,"role":role,"tackle_timer":0.0}
+func _make_player(position: Vector2, role: String, team: Dictionary) -> Dictionary:
+	var profile := _role_profile(role)
+	var team_speed := float(team.get("speed", 6)) / 7.0
+	var team_attack := float(team.get("attack", 7)) / 7.0
+	var team_defence := float(team.get("defence", 7)) / 7.0
+	return {
+		"position":position,"stamina":100.0,"role":role,"tackle_timer":0.0,"injured":0.0,
+		"speed_mult":float(profile.get("speed",1.0)) * team_speed,
+		"stamina_mult":float(profile.get("stamina",1.0)),
+		"tackle_mult":float(profile.get("tackle",1.0)) * team_defence,
+		"passing_mult":float(profile.get("passing",1.0)) * team_attack,
+		"shooting_mult":float(profile.get("shooting",1.0)) * team_attack,
+		"toughness":float(profile.get("toughness",5)),
+		"discipline":float(team.get("discipline",6))
+	}
+
+func _tick_injuries(players: Array, delta: float) -> void:
+	for i in range(players.size()):
+		var player: Dictionary = players[i]
+		player["injured"] = maxf(0.0, float(player.get("injured", 0.0)) - delta)
+		players[i] = player
 
 func _reset_positions() -> void:
 	var home_spawns := [Vector2(205,135), Vector2(225,190), Vector2(205,245)]
@@ -126,24 +187,32 @@ func _reset_positions() -> void:
 		var p: Dictionary = away_players[i]; p["position"] = away_spawns[i]; away_players[i] = p
 
 func _start_match() -> void:
-	_prepare_match(); phase = GamePhase.PLAYING
+	_prepare_match()
+	phase = GamePhase.PLAYING
 
 func _finish_match() -> void:
-	phase = GamePhase.RESULT; possession_team = 0; possession_index = -1; ball_velocity = Vector2.ZERO
+	phase = GamePhase.RESULT
+	possession_team = 0
+	possession_index = -1
+	ball_velocity = Vector2.ZERO
 	result_text = MatchRules.winner_text(home_team_name, away_team_name, home_score, away_score)
 	var career: Dictionary = league.get("career", {})
 	var prize := MatchRules.prize_for_result(home_score, away_score, int(career.get("win_purse",600)), int(career.get("draw_purse",250)), 0)
 	funds += prize
 	if prize > 0: result_text += "  +%d" % prize
+	var league_cfg: Dictionary = league.get("league", {})
+	LeagueRules.record_result(league_table, home_team_id, away_team_id, home_score, away_score, int(league_cfg.get("win_points",3)), int(league_cfg.get("draw_points",1)))
 
 func _update_controlled_player(delta: float) -> void:
 	if home_players.is_empty(): return
 	var player: Dictionary = home_players[controlled_home_index]
+	if float(player.get("injured",0.0)) > 0.0: return
 	var movement := Input.get_vector("move_left","move_right","move_up","move_down")
 	var position: Vector2 = player["position"]
-	position += movement * PLAYER_SPEED * delta
+	position += movement * PLAYER_SPEED * float(player.get("speed_mult",1.0)) * delta
 	player["position"] = _clamp_to_court(position)
-	player["stamina"] = MatchRules.recover_stamina(float(player["stamina"]), movement.length_squared() > 0.01, delta)
+	var stamina_rate := float(player.get("stamina_mult",1.0))
+	player["stamina"] = MatchRules.recover_stamina(float(player["stamina"]), movement.length_squared() > 0.01, delta * stamina_rate)
 	home_players[controlled_home_index] = player
 	if possession_team == 1 and possession_index == controlled_home_index:
 		var carrier: Vector2 = player["position"]
@@ -152,13 +221,16 @@ func _update_controlled_player(delta: float) -> void:
 		elif Input.is_action_just_pressed("strike_ball") and float(player["stamina"]) >= 10.0:
 			player["stamina"] = MatchRules.clamp_stamina(float(player["stamina"]) - 10.0)
 			home_players[controlled_home_index] = player
-			_release_ball(carrier.direction_to(get_global_mouse_position()), 420.0)
+			_release_ball(carrier.direction_to(get_global_mouse_position()), 420.0 * float(player.get("shooting_mult",1.0)))
 
 func _update_team_ai(players: Array, home: bool, delta: float) -> void:
 	for i in range(players.size()):
 		if home and i == controlled_home_index: continue
 		var player: Dictionary = players[i]
 		player["tackle_timer"] = maxf(0.0, float(player["tackle_timer"]) - delta)
+		if float(player.get("injured",0.0)) > 0.0:
+			players[i] = player
+			continue
 		var position: Vector2 = player["position"]
 		var target := TeamPlayRules.support_target(i, home, COURT)
 		var owns_ball := possession_team == (1 if home else 2) and possession_index == i
@@ -169,22 +241,26 @@ func _update_team_ai(players: Array, home: bool, delta: float) -> void:
 		elif possession_team == (2 if home else 1) and position.distance_squared_to(_carrier_position()) < 16000.0:
 			target = _carrier_position()
 		var direction := position.direction_to(target)
-		position += direction * AI_SPEED * delta
+		position += direction * AI_SPEED * float(player.get("speed_mult",1.0)) * delta
 		player["position"] = _clamp_to_court(position)
-		player["stamina"] = MatchRules.recover_stamina(float(player["stamina"]), direction.length_squared() > 0.01, delta)
+		player["stamina"] = MatchRules.recover_stamina(float(player["stamina"]), direction.length_squared() > 0.01, delta * float(player.get("stamina_mult",1.0)))
 		players[i] = player
 		if owns_ball:
 			ball_position = position + Vector2(16 if home else -16,3)
 			if (home and position.x > COURT.get_center().x + 90) or ((not home) and position.x < COURT.get_center().x - 90):
 				var aim := Vector2(COURT.end.x - 18, COURT.get_center().y) if home else Vector2(COURT.position.x + 18, COURT.get_center().y)
-				_release_ball(position.direction_to(aim), 365.0)
+				_release_ball(position.direction_to(aim), 365.0 * float(player.get("shooting_mult",1.0)))
 
 func _pass_to_teammate() -> void:
-	var source: Vector2 = home_players[controlled_home_index]["position"]
+	var source: Dictionary = home_players[controlled_home_index]
+	var source_position: Vector2 = source["position"]
 	var target_index := TeamPlayRules.nearest_teammate_index(home_players, controlled_home_index, get_global_mouse_position())
-	if target_index == controlled_home_index: _release_ball(source.direction_to(get_global_mouse_position()), 270.0); return
+	var pass_speed := 285.0 * float(source.get("passing_mult",1.0))
+	if target_index == controlled_home_index:
+		_release_ball(source_position.direction_to(get_global_mouse_position()), pass_speed)
+		return
 	var target: Vector2 = home_players[target_index]["position"]
-	_release_ball(source.direction_to(target), 285.0)
+	_release_ball(source_position.direction_to(target), pass_speed)
 	controlled_home_index = target_index
 
 func _switch_controlled_player() -> void:
@@ -195,33 +271,59 @@ func _update_ball(delta: float) -> void:
 	if possession_team != 0: return
 	ball_position += ball_velocity * delta
 	ball_velocity = ball_velocity.move_toward(Vector2.ZERO, 92.0 * delta)
+	if _check_interception(): return
 	if _check_ring_score() or _check_end_zone_score(): return
 	_bounce_ball()
+
+func _check_interception() -> bool:
+	if ball_velocity.length() < 90.0: return false
+	for i in range(home_players.size()):
+		var p: Dictionary = home_players[i]
+		if float(p.get("injured",0.0)) <= 0.0 and (p["position"] as Vector2).distance_to(ball_position) < 14.0:
+			ball_velocity *= 0.35
+			return true
+	for i in range(away_players.size()):
+		var p: Dictionary = away_players[i]
+		if float(p.get("injured",0.0)) <= 0.0 and (p["position"] as Vector2).distance_to(ball_position) < 14.0:
+			ball_velocity *= 0.35
+			return true
+	return false
 
 func _resolve_possession() -> void:
 	if possession_team != 0 or ball_velocity.length() > 62.0: return
 	for i in range(home_players.size()):
 		var p: Vector2 = home_players[i]["position"]
-		if p.distance_to(ball_position) < 21.0:
+		if float(home_players[i].get("injured",0.0)) <= 0.0 and p.distance_to(ball_position) < 21.0:
 			possession_team = 1; possession_index = i; controlled_home_index = i; return
 	for i in range(away_players.size()):
 		var p: Vector2 = away_players[i]["position"]
-		if p.distance_to(ball_position) < 21.0:
+		if float(away_players[i].get("injured",0.0)) <= 0.0 and p.distance_to(ball_position) < 21.0:
 			possession_team = 2; possession_index = i; return
 
 func _resolve_tackles() -> void:
 	if home_players.is_empty() or away_players.is_empty(): return
 	var player: Dictionary = home_players[controlled_home_index]
+	if float(player.get("injured",0.0)) > 0.0: return
 	var player_pos: Vector2 = player["position"]
 	if Input.is_action_just_pressed("tackle") and MatchRules.can_tackle(float(player["stamina"]), tackle_timer):
-		player["stamina"] = MatchRules.clamp_stamina(float(player["stamina"]) - 14.0); tackle_timer = 0.55
+		player["stamina"] = MatchRules.clamp_stamina(float(player["stamina"]) - 14.0)
+		tackle_timer = 0.55
 		var target_index := TeamPlayRules.nearest_player_index(away_players, player_pos)
 		var opponent: Dictionary = away_players[target_index]
 		var opponent_pos: Vector2 = opponent["position"]
 		if player_pos.distance_to(opponent_pos) < 31.0:
-			var push := player_pos.direction_to(opponent_pos) * 24.0
-			opponent["position"] = _clamp_to_court(opponent_pos + push)
-			if possession_team == 2 and possession_index == target_index: _knock_ball_loose(opponent["position"], push.normalized())
+			var tackle_force := PLAYER_SPEED * float(player.get("tackle_mult",1.0))
+			if LeagueRules.foul_for_tackle(tackle_force, float(player.get("discipline",6.0))):
+				home_fouls += 1
+				status_text = "FOUL - POSSESSION TURNOVER"
+				status_timer = 1.5
+				possession_team = 2
+				possession_index = target_index
+			else:
+				var push := player_pos.direction_to(opponent_pos) * 24.0 * float(player.get("tackle_mult",1.0))
+				opponent["position"] = _clamp_to_court(opponent_pos + push)
+				opponent["injured"] = LeagueRules.injury_seconds_from_hit(tackle_force, float(opponent.get("toughness",5.0)))
+				if possession_team == 2 and possession_index == target_index: _knock_ball_loose(opponent["position"], push.normalized())
 			away_players[target_index] = opponent
 		home_players[controlled_home_index] = player
 	if possession_team == 1 and possession_index >= 0:
@@ -229,9 +331,20 @@ func _resolve_tackles() -> void:
 		var tackler_index := TeamPlayRules.nearest_player_index(away_players, carrier)
 		var tackler: Dictionary = away_players[tackler_index]
 		var tackler_pos: Vector2 = tackler["position"]
-		if float(tackler["tackle_timer"]) <= 0.0 and tackler_pos.distance_to(carrier) < 28.0 and float(tackler["stamina"]) >= 10.0:
-			tackler["stamina"] = MatchRules.clamp_stamina(float(tackler["stamina"]) - 10.0); tackler["tackle_timer"] = 0.85
-			_knock_ball_loose(carrier, tackler_pos.direction_to(carrier)); away_players[tackler_index] = tackler
+		if float(tackler.get("injured",0.0)) <= 0.0 and float(tackler["tackle_timer"]) <= 0.0 and tackler_pos.distance_to(carrier) < 28.0 and float(tackler["stamina"]) >= 10.0:
+			var force := AI_SPEED * float(tackler.get("tackle_mult",1.0))
+			tackler["stamina"] = MatchRules.clamp_stamina(float(tackler["stamina"]) - 10.0)
+			tackler["tackle_timer"] = 0.85
+			if LeagueRules.foul_for_tackle(force, float(tackler.get("discipline",6.0))):
+				away_fouls += 1
+				status_text = "OPPOSITION FOUL"
+				status_timer = 1.5
+			else:
+				var carrier_player: Dictionary = home_players[possession_index]
+				carrier_player["injured"] = LeagueRules.injury_seconds_from_hit(force, float(carrier_player.get("toughness",5.0)))
+				home_players[possession_index] = carrier_player
+				_knock_ball_loose(carrier, tackler_pos.direction_to(carrier))
+			away_players[tackler_index] = tackler
 
 func _knock_ball_loose(origin: Vector2, direction: Vector2) -> void:
 	ball_position = origin; ball_velocity = direction.normalized() * 115.0; possession_team = 0; possession_index = -1
@@ -252,9 +365,12 @@ func _bounce_ball() -> void:
 	elif ball_position.y > COURT.end.y - BALL_RADIUS: ball_position.y = COURT.end.y - BALL_RADIUS; ball_velocity.y = -absf(ball_velocity.y) * wall_rebound
 
 func _check_ring_score() -> bool:
-	var left := Vector2(COURT.position.x + 18, COURT.get_center().y); var right := Vector2(COURT.end.x - 18, COURT.get_center().y)
-	if ball_position.distance_to(left) < 13 and ball_velocity.x < -120: _award_score(2, ring_points, "RING SHOT"); return true
-	if ball_position.distance_to(right) < 13 and ball_velocity.x > 120: _award_score(1, ring_points, "RING SHOT"); return true
+	var left := Vector2(COURT.position.x + 18, COURT.get_center().y)
+	var right := Vector2(COURT.end.x - 18, COURT.get_center().y)
+	if ball_position.distance_to(left) < 13 and ball_velocity.x < -120:
+		away_ring_shots += 1; _award_score(2, ring_points, "RING SHOT"); return true
+	if ball_position.distance_to(right) < 13 and ball_velocity.x > 120:
+		home_ring_shots += 1; _award_score(1, ring_points, "RING SHOT"); return true
 	return false
 
 func _check_end_zone_score() -> bool:
@@ -266,7 +382,9 @@ func _check_end_zone_score() -> bool:
 func _award_score(team: int, points: int, label: String) -> void:
 	if team == 1: home_score += points
 	else: away_score += points
-	last_score_text = "%s +%d" % [label, points]; score_banner_timer = 1.5; _reset_ball(true)
+	last_score_text = "%s +%d" % [label, points]
+	score_banner_timer = 1.5
+	_reset_ball(true)
 
 func _reset_ball(preserve_stamina: bool = true) -> void:
 	ball_position = COURT.get_center(); ball_velocity = Vector2.ZERO; possession_team = 0; possession_index = -1
@@ -294,17 +412,24 @@ func _draw() -> void:
 	_draw_match()
 
 func _draw_title() -> void:
-	draw_string(ThemeDB.fallback_font,Vector2(0,82),"OBSIDIAN RING",HORIZONTAL_ALIGNMENT_CENTER,640,30,Color("eadcae"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,132),"MATCH %02d   %s" % [match_number,court_name],HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("bca777"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,170),"%s  VS  %s" % [home_team_name,away_team_name],HORIZONTAL_ALIGNMENT_CENTER,640,17,Color("f2d47d"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,230),"ENTER  BEGIN MATCH",HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("eadcae"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,272),"3 ON 3   SPACE PASS   X STRIKE   Z TACKLE   C SWITCH",HORIZONTAL_ALIGNMENT_CENTER,640,11,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,75),"OBSIDIAN RING",HORIZONTAL_ALIGNMENT_CENTER,640,30,Color("eadcae"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,120),"MATCH %02d   %s" % [match_number,court_name],HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,155),"%s  VS  %s" % [home_team_name,away_team_name],HORIZONTAL_ALIGNMENT_CENTER,640,17,Color("f2d47d"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,210),"ENTER BEGIN MATCH",HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("eadcae"))
+	var sorted := LeagueRules.sorted_table(league_table)
+	if not sorted.is_empty():
+		draw_string(ThemeDB.fallback_font,Vector2(0,245),"LEADER %s  %d PTS" % [str(sorted[0]["name"]).to_upper(),int(sorted[0]["points"])],HORIZONTAL_ALIGNMENT_CENTER,640,11,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,275),"3 ON 3   SPACE PASS   X STRIKE   Z TACKLE   C SWITCH",HORIZONTAL_ALIGNMENT_CENTER,640,11,Color("bca777"))
 
 func _draw_result() -> void:
-	draw_string(ThemeDB.fallback_font,Vector2(0,120),result_text,HORIZONTAL_ALIGNMENT_CENTER,640,21,Color("f2d47d"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,162),"%s %02d   %02d %s" % [home_team_name,home_score,away_score,away_team_name],HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("eadcae"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,205),"FUNDS %05d" % funds,HORIZONTAL_ALIGNMENT_CENTER,640,13,Color("bca777"))
-	draw_string(ThemeDB.fallback_font,Vector2(0,250),"ENTER  NEXT MATCH    R  REMATCH",HORIZONTAL_ALIGNMENT_CENTER,640,12,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,95),result_text,HORIZONTAL_ALIGNMENT_CENTER,640,21,Color("f2d47d"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,135),"%s %02d   %02d %s" % [home_team_name,home_score,away_score,away_team_name],HORIZONTAL_ALIGNMENT_CENTER,640,15,Color("eadcae"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,170),"FOULS %d-%d   RINGS %d-%d" % [home_fouls,away_fouls,home_ring_shots,away_ring_shots],HORIZONTAL_ALIGNMENT_CENTER,640,12,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,200),"FUNDS %05d" % funds,HORIZONTAL_ALIGNMENT_CENTER,640,13,Color("bca777"))
+	var sorted := LeagueRules.sorted_table(league_table)
+	for i in range(mini(3, sorted.size())):
+		draw_string(ThemeDB.fallback_font,Vector2(170,228 + i*18),"%d. %-18s %02d" % [i+1,str(sorted[i]["name"]).to_upper(),int(sorted[i]["points"])],HORIZONTAL_ALIGNMENT_LEFT,320,11,Color("9f8d68"))
+	draw_string(ThemeDB.fallback_font,Vector2(0,300),"ENTER NEXT MATCH    R REMATCH",HORIZONTAL_ALIGNMENT_CENTER,640,12,Color("bca777"))
 
 func _draw_match() -> void:
 	draw_rect(COURT,Color("463522")); draw_rect(COURT,Color("b99b65"),false,3.0)
@@ -312,12 +437,17 @@ func _draw_match() -> void:
 	var left := Vector2(COURT.position.x+18,COURT.get_center().y); var right := Vector2(COURT.end.x-18,COURT.get_center().y)
 	draw_arc(left,13,0,TAU,24,Color("d2b87c"),4); draw_arc(right,13,0,TAU,24,Color("d2b87c"),4); draw_circle(ball_position,BALL_RADIUS,Color("1d1710"))
 	for i in range(home_players.size()):
-		var p: Vector2 = home_players[i]["position"]; draw_circle(p,11,Color("d5c39a"))
+		var p: Vector2 = home_players[i]["position"]
+		var tone := Color("6e6654") if float(home_players[i].get("injured",0.0)) > 0.0 else Color("d5c39a")
+		draw_circle(p,11,tone)
 		if i == controlled_home_index: draw_arc(p,15,0,TAU,18,Color("f2d47d"),2)
 	for player in away_players:
-		var p: Vector2 = player["position"]; draw_circle(p,11,Color("9b563d"))
+		var p: Vector2 = player["position"]
+		var tone := Color("633d34") if float(player.get("injured",0.0)) > 0.0 else Color("9b563d")
+		draw_circle(p,11,tone)
 	draw_rect(Rect2(8,8,624,43),Color("090806"))
 	var stamina := int(home_players[controlled_home_index]["stamina"]) if not home_players.is_empty() else 0
 	draw_string(ThemeDB.fallback_font,Vector2(16,27),"%s %02d   %03d   %02d %s" % [home_team_name,home_score,int(ceil(match_time)),away_score,away_team_name],HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("eadcae"))
-	draw_string(ThemeDB.fallback_font,Vector2(16,45),"%s  P%d  STA %03d" % [court_name,controlled_home_index+1,stamina],HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color("bca777"))
+	draw_string(ThemeDB.fallback_font,Vector2(16,45),"%s  P%d  STA %03d  F %d-%d" % [court_name,controlled_home_index+1,stamina,home_fouls,away_fouls],HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color("bca777"))
 	if score_banner_timer > 0: draw_string(ThemeDB.fallback_font,Vector2(250,62),last_score_text,HORIZONTAL_ALIGNMENT_CENTER,140,15,Color("f2d47d"))
+	if status_timer > 0: draw_string(ThemeDB.fallback_font,Vector2(0,335),status_text,HORIZONTAL_ALIGNMENT_CENTER,640,12,Color("e5b66e"))
