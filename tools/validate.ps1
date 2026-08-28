@@ -180,9 +180,9 @@ foreach ($Token in @('player_line','foul_line','postseason_line')) { if (-not $M
 $ManagementDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/management_summary_director.gd')
 foreach ($Token in @('ManagementSummaryRules.player_line','FoulLedgerDirector','SeasonDirector','PanelContainer')) { if (-not $ManagementDirectorText.Contains($Token)) { throw "Management summary director missing token: $Token" } }
 $StandingsRulesText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_rules.gd')
-foreach ($Token in @('sorted_rows','row_text','playoff_cutoff_text','score_diff')) { if (-not $StandingsRulesText.Contains($Token)) { throw "Standings summary rules missing token: $Token" } }
+foreach ($Token in @('sorted_rows','row_line','playoff_cutoff_line','marker')) { if (-not $StandingsRulesText.Contains($Token)) { throw "Standings summary rules missing token: $Token" } }
 $StandingsDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_director.gd')
-foreach ($Token in @('StandingsSummaryRules.sorted_rows','StandingsSummaryRules.row_text','league_table','playoff_teams')) { if (-not $StandingsDirectorText.Contains($Token)) { throw "Standings summary director missing token: $Token" } }
+foreach ($Token in @('StandingsSummaryRules.sorted_rows','StandingsSummaryRules.row_line','StandingsSummaryRules.playoff_cutoff_line','league_table','playoff_teams')) { if (-not $StandingsDirectorText.Contains($Token)) { throw "Standings summary director missing token: $Token" } }
 $RecoveryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/save_recovery_rules.gd')
 foreach ($Token in @('parse_supported_json','choose_primary_or_backup','source')) { if (-not $RecoveryRulesText.Contains($Token)) { throw "Season save recovery rules missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
