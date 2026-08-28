@@ -26,13 +26,13 @@ func _process(_delta: float) -> void:
 
 func _build_panel() -> void:
 	_panel = PanelContainer.new()
-	_panel.position = Vector2(118, 275)
-	_panel.size = Vector2(404, 72)
+	_panel.position = Vector2(118, 314)
+	_panel.size = Vector2(404, 42)
 	_label = Label.new()
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_label.add_theme_font_size_override("font_size", 9)
-	_label.custom_minimum_size = Vector2(392, 60)
+	_label.add_theme_font_size_override("font_size", 8)
+	_label.custom_minimum_size = Vector2(392, 36)
 	_panel.add_child(_label)
 	add_child(_panel)
 	_panel.visible = false
