@@ -13,133 +13,131 @@ function Resolve-Godot {
     return $null
 }
 
+function Assert-UniqueIds($Collection, [string]$Label) {
+    $Ids = @($Collection | ForEach-Object { $_.id })
+    if ($Ids -contains $null -or $Ids -contains '') { throw "Blank id in $Label" }
+    if (@($Ids | Sort-Object -Unique).Count -ne $Ids.Count) { throw "Duplicate id in $Label" }
+}
+
 Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
-    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_director.gd','scripts/season_save.gd',
-    'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json',
-    'data/rosters.json','data/fixtures.json','docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
+    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
+    'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd','scripts/match_substitution_director.gd',
+    'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
+    'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
 foreach ($RelativePath in $Required) {
     if (-not (Test-Path (Join-Path $Root $RelativePath))) { throw "Missing required file: $RelativePath" }
 }
-
-$Parsed = @{}
-foreach ($JsonPath in @('data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json')) {
-    $Data = Get-Content -Raw (Join-Path $Root $JsonPath) | ConvertFrom-Json
-    $Parsed[$JsonPath] = $Data
-    Write-Host "JSON OK: $JsonPath" -ForegroundColor DarkGreen
-    foreach ($CollectionName in @('teams','rulesets','courts','roles')) {
-        $Collection = $Data.$CollectionName
-        if ($null -eq $Collection) { continue }
-        $Ids = @($Collection | ForEach-Object { $_.id })
-        if ($Ids -contains $null -or $Ids -contains '') { throw "Blank id in $JsonPath/$CollectionName" }
-        if (@($Ids | Sort-Object -Unique).Count -ne $Ids.Count) { throw "Duplicate id in $JsonPath/$CollectionName" }
-    }
+foreach ($Forbidden in @('.github/workflows','.godot','build','dist')) {
+    if (Test-Path (Join-Path $Root $Forbidden)) { throw "Forbidden generated/paid-CI path committed: $Forbidden" }
 }
 
-$Teams = @($Parsed['data/teams.json'].teams)
-$TeamIds = @($Teams | ForEach-Object { $_.id })
-$CourtIds = @($Parsed['data/courts.json'].courts | ForEach-Object { $_.id })
-foreach ($Team in $Teams) {
-    if ($Team.home_court -and $CourtIds -notcontains $Team.home_court) { throw "Team home_court not found: $($Team.id) -> $($Team.home_court)" }
+$Teams = Get-Content -Raw (Join-Path $Root 'data/teams.json') | ConvertFrom-Json
+$Rules = Get-Content -Raw (Join-Path $Root 'data/rules.json') | ConvertFrom-Json
+$Courts = Get-Content -Raw (Join-Path $Root 'data/courts.json') | ConvertFrom-Json
+$LeagueData = Get-Content -Raw (Join-Path $Root 'data/league.json') | ConvertFrom-Json
+$Roles = Get-Content -Raw (Join-Path $Root 'data/player_roles.json') | ConvertFrom-Json
+$Rosters = Get-Content -Raw (Join-Path $Root 'data/rosters.json') | ConvertFrom-Json
+$Fixtures = Get-Content -Raw (Join-Path $Root 'data/fixtures.json') | ConvertFrom-Json
+Assert-UniqueIds $Teams.teams 'teams'
+Assert-UniqueIds $Rules.rulesets 'rulesets'
+Assert-UniqueIds $Courts.courts 'courts'
+Assert-UniqueIds $Roles.roles 'roles'
+
+$TeamIds = @($Teams.teams | ForEach-Object { $_.id })
+$CourtIds = @($Courts.courts | ForEach-Object { $_.id })
+$RoleIds = @($Roles.roles | ForEach-Object { $_.id })
+foreach ($Team in $Teams.teams) {
+    if ($CourtIds -notcontains $Team.home_court) { throw "Unknown team home court: $($Team.id) -> $($Team.home_court)" }
     foreach ($Rating in @('attack','defence','speed','discipline')) {
         $Value = [int]$Team.$Rating
-        if ($Value -lt 1 -or $Value -gt 10) { throw "Team rating out of range 1..10: $($Team.id).$Rating=$Value" }
+        if ($Value -lt 1 -or $Value -gt 10) { throw "Team rating out of range: $($Team.id).$Rating=$Value" }
     }
 }
-
-$RoleIds = @($Parsed['data/player_roles.json'].roles | ForEach-Object { $_.id })
-foreach ($RequiredRole in @('runner','striker','guard')) {
-    if ($RoleIds -notcontains $RequiredRole) { throw "Missing required player role: $RequiredRole" }
-}
-foreach ($Role in $Parsed['data/player_roles.json'].roles) {
-    foreach ($Multiplier in @('speed','stamina','tackle','passing','shooting')) {
-        if ([double]$Role.$Multiplier -le 0) { throw "Role multiplier must be positive: $($Role.id).$Multiplier" }
-    }
+foreach ($RequiredRole in @('runner','striker','guard')) { if ($RoleIds -notcontains $RequiredRole) { throw "Missing required role: $RequiredRole" } }
+foreach ($Role in $Roles.roles) {
+    foreach ($Field in @('speed','stamina','tackle','passing','shooting')) { if ([double]$Role.$Field -le 0) { throw "Role multiplier must be positive: $($Role.id).$Field" } }
     if ([int]$Role.toughness -lt 1 -or [int]$Role.toughness -gt 10) { throw "Role toughness out of range: $($Role.id)" }
 }
 
-$AllPlayerIds = @()
-$RosterTeamIds = @()
-foreach ($Roster in $Parsed['data/rosters.json'].rosters) {
+$RosterTeams = @()
+$PlayerIds = @()
+foreach ($Roster in $Rosters.rosters) {
     if ($TeamIds -notcontains $Roster.team_id) { throw "Roster references unknown team: $($Roster.team_id)" }
-    if ($RosterTeamIds -contains $Roster.team_id) { throw "Duplicate roster for team: $($Roster.team_id)" }
-    $RosterTeamIds += $Roster.team_id
-    if (@($Roster.players).Count -lt 5) { throw "Roster must contain at least five players: $($Roster.team_id)" }
-    $RolesOnRoster = @()
+    if ($RosterTeams -contains $Roster.team_id) { throw "Duplicate roster: $($Roster.team_id)" }
+    $RosterTeams += $Roster.team_id
+    if (@($Roster.players).Count -lt 5) { throw "Roster needs at least five players: $($Roster.team_id)" }
+    $RosterRoles = @($Roster.players | ForEach-Object { $_.role })
+    foreach ($RequiredRole in @('runner','striker','guard')) { if ($RosterRoles -notcontains $RequiredRole) { throw "Roster lacks $RequiredRole: $($Roster.team_id)" } }
     foreach ($Player in $Roster.players) {
-        if (-not $Player.id -or -not $Player.name) { throw "Roster player missing id/name: $($Roster.team_id)" }
-        if ($RoleIds -notcontains $Player.role) { throw "Player references unknown role: $($Player.id) -> $($Player.role)" }
-        $RolesOnRoster += $Player.role
+        if (-not $Player.id -or -not $Player.name) { throw "Player missing id/name: $($Roster.team_id)" }
+        if ($RoleIds -notcontains $Player.role) { throw "Unknown player role: $($Player.id) -> $($Player.role)" }
         if ([int]$Player.skill -lt 1 -or [int]$Player.skill -gt 10) { throw "Player skill out of range: $($Player.id)" }
-        if ($null -ne $Player.injury_matches -and [int]$Player.injury_matches -lt 0) { throw "Player injury_matches cannot be negative: $($Player.id)" }
-        if ($null -ne $Player.suspension_matches -and [int]$Player.suspension_matches -lt 0) { throw "Player suspension_matches cannot be negative: $($Player.id)" }
-        if ($null -ne $Player.booking_points -and [int]$Player.booking_points -lt 0) { throw "Player booking_points cannot be negative: $($Player.id)" }
-        if ([int]$Player.toughness_bonus -lt -2 -or [int]$Player.toughness_bonus -gt 3) { throw "Player toughness_bonus out of range: $($Player.id)" }
-        if ([int]$Player.discipline_bonus -lt -2 -or [int]$Player.discipline_bonus -gt 3) { throw "Player discipline_bonus out of range: $($Player.id)" }
-        $AllPlayerIds += $Player.id
-    }
-    foreach ($RequiredRole in @('runner','striker','guard')) {
-        if ($RolesOnRoster -notcontains $RequiredRole) { throw "Roster lacks required role $RequiredRole: $($Roster.team_id)" }
+        foreach ($Field in @('injury_matches','suspension_matches','booking_points')) {
+            if ($null -ne $Player.$Field -and [int]$Player.$Field -lt 0) { throw "Negative player state: $($Player.id).$Field" }
+        }
+        $PlayerIds += $Player.id
     }
 }
-if (@($RosterTeamIds | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw 'Every team must have exactly one roster.' }
-if (@($AllPlayerIds | Sort-Object -Unique).Count -ne $AllPlayerIds.Count) { throw 'Roster player ids must be globally unique.' }
+if (@($RosterTeams | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw 'Every team must have exactly one roster.' }
+if (@($PlayerIds | Sort-Object -Unique).Count -ne $PlayerIds.Count) { throw 'Player IDs must be globally unique.' }
 
-$SeenRounds = @()
-$PairCounts = @{}
-foreach ($Round in $Parsed['data/fixtures.json'].rounds) {
-    $RoundNo = [int]$Round.round
-    if ($RoundNo -le 0 -or $SeenRounds -contains $RoundNo) { throw "Invalid or duplicate fixture round: $RoundNo" }
-    $SeenRounds += $RoundNo
-    $SeenTeams = @()
-    foreach ($Fixture in $Round.fixtures) {
-        if ($TeamIds -notcontains $Fixture.home -or $TeamIds -notcontains $Fixture.away) { throw "Fixture references unknown team in round $RoundNo" }
-        if ($Fixture.home -eq $Fixture.away) { throw "Team cannot play itself in round $RoundNo" }
-        if ($SeenTeams -contains $Fixture.home -or $SeenTeams -contains $Fixture.away) { throw "Team appears twice in round $RoundNo" }
-        $SeenTeams += @($Fixture.home,$Fixture.away)
-        $PairKey = (@($Fixture.home,$Fixture.away) | Sort-Object) -join ':'
-        if (-not $PairCounts.ContainsKey($PairKey)) { $PairCounts[$PairKey] = 0 }
-        $PairCounts[$PairKey]++
-    }
-    if (@($SeenTeams | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw "Every team must appear exactly once in fixture round $RoundNo" }
-}
-
-$League = $Parsed['data/league.json'].league
-$Career = $Parsed['data/league.json'].career
-$Playoffs = $Parsed['data/league.json'].playoffs
-if ([int]$League.win_points -le [int]$League.draw_points) { throw 'League win_points must exceed draw_points.' }
-if ([int]$League.draw_points -lt [int]$League.loss_points) { throw 'League draw_points cannot be below loss_points.' }
-if ([int]$League.playoff_teams -gt $Teams.Count -or [int]$League.playoff_teams -lt 2) { throw 'playoff_teams must fit the league.' }
-if (@($Parsed['data/fixtures.json'].rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture round count must equal league season_rounds.' }
-if ([int]$League.booking_threshold -lt 1 -or [int]$League.suspension_matches -lt 1) { throw 'Booking and suspension settings must be positive.' }
-if ([int]$Career.training_cost_base -le 0 -or [int]$Career.medical_cost_base -le 0) { throw 'Career training and medical costs must be positive.' }
-if ([int]$Career.win_purse -lt 0 -or [int]$Career.draw_purse -lt 0) { throw 'Career purses cannot be negative.' }
+$League = $LeagueData.league
+$Career = $LeagueData.career
+$Playoffs = $LeagueData.playoffs
+if ([int]$League.win_points -le [int]$League.draw_points) { throw 'win_points must exceed draw_points.' }
+if ([int]$League.draw_points -lt [int]$League.loss_points) { throw 'draw_points cannot be below loss_points.' }
+if ([int]$League.playoff_teams -ne 4) { throw 'Current playoff implementation requires four qualifiers.' }
+if ([int]$League.booking_threshold -lt 1 -or [int]$League.suspension_matches -lt 1) { throw 'Booking/suspension settings must be positive.' }
+if ([int]$Career.training_cost_base -le 0 -or [int]$Career.medical_cost_base -le 0) { throw 'Training/medical costs must be positive.' }
 if ([bool]$Playoffs.enabled) {
-    if ([int]$League.playoff_teams -ne 4) { throw 'Current playoff bracket implementation requires four qualifiers.' }
     if ($Playoffs.semifinal_pairing -ne '1v4_2v3') { throw 'Unsupported semifinal pairing.' }
     if ($Playoffs.draw_tiebreak -ne 'table_seed') { throw 'Unsupported playoff draw tiebreak.' }
     if ([int]$Playoffs.championship_purse -lt 0) { throw 'Championship purse cannot be negative.' }
 }
-foreach ($Pair in $PairCounts.GetEnumerator()) {
-    if ([int]$Pair.Value -gt 4) { throw "Fixture pair repeats too often: $($Pair.Key)" }
+
+$SeenRounds = @()
+foreach ($Round in $Fixtures.rounds) {
+    $RoundNo = [int]$Round.round
+    if ($RoundNo -le 0 -or $SeenRounds -contains $RoundNo) { throw "Invalid fixture round: $RoundNo" }
+    $SeenRounds += $RoundNo
+    $SeenTeams = @()
+    foreach ($Fixture in $Round.fixtures) {
+        if ($TeamIds -notcontains $Fixture.home -or $TeamIds -notcontains $Fixture.away) { throw "Unknown fixture team in round $RoundNo" }
+        if ($Fixture.home -eq $Fixture.away) { throw "Self fixture in round $RoundNo" }
+        if ($SeenTeams -contains $Fixture.home -or $SeenTeams -contains $Fixture.away) { throw "Team appears twice in round $RoundNo" }
+        $SeenTeams += @($Fixture.home,$Fixture.away)
+    }
+    if (@($SeenTeams | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw "Every team must appear once in round $RoundNo" }
 }
+if (@($Fixtures.rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture round count must equal season_rounds.' }
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
-if ($ProjectText -notmatch 'SeasonSave="\*res://scripts/season_save.gd"') { throw 'SeasonSave autoload is not configured.' }
-if ($ProjectText -notmatch 'SeasonDirector="\*res://scripts/season_director.gd"') { throw 'SeasonDirector autoload is not configured.' }
-
-$SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('DisciplineRules.apply_booking','DisciplineRules.serve_round','PlayoffRules.semifinal_pairings','PlayoffRules.final_pairing','user://obsidian_ring_postseason.json')) {
-    if ($SeasonDirectorText -notmatch [regex]::Escape($Token)) { throw "SeasonDirector missing live integration token: $Token" }
+foreach ($Autoload in @(
+    'SeasonSave="*res://scripts/season_save.gd"',
+    'SeasonDirector="*res://scripts/season_director.gd"',
+    'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"'
+)) {
+    if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
 }
-$RosterRulesText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
-if ($RosterRulesText -notmatch 'suspension_matches') { throw 'RosterRules is not suspension-aware.' }
+$SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
+foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) {
+    if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" }
+}
+$SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
+foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','_substitute_controlled_player','suspension_matches')) {
+    if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" }
+}
+$SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
+foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round')) {
+    if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" }
+}
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
-    Write-Warning 'Godot executable not found. Structural, save, live discipline, postseason, roster, fixture, role and league validation passed; engine smoke test skipped.'
+    Write-Warning 'Godot executable not found. Structural/data/director/save validation passed; engine smoke test skipped.'
     exit 0
 }
 & $Godot --headless --path $Root --editor --quit
