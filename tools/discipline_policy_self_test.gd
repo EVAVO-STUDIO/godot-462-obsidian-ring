@@ -3,6 +3,7 @@ extends SceneTree
 const DisciplineRules = preload("res://scripts/discipline_rules.gd")
 const FoulLedgerRules = preload("res://scripts/foul_ledger_rules.gd")
 const ManagementSummaryRules = preload("res://scripts/management_summary_rules.gd")
+const StandingsSummaryRules = preload("res://scripts/standings_summary_rules.gd")
 
 var failures: Array[String] = []
 
@@ -11,6 +12,7 @@ func _initialize() -> void:
 	_test_custom_policy()
 	_test_foul_attribution()
 	_test_management_summary()
+	_test_standings_summary()
 	if failures.is_empty():
 		print("Obsidian Ring discipline policy self-test passed.")
 		quit(0)
@@ -63,7 +65,22 @@ func _test_management_summary() -> void:
 	var project := FileAccess.open("res://project.godot", FileAccess.READ)
 	_expect(project != null, "project.godot should be readable for management summary autoload check")
 	if project != null:
-		_expect(project.get_as_text().contains("ManagementSummaryDirector=\"*res://scripts/management_summary_director.gd\""), "management summary director must remain autoloaded")
+		var text := project.get_as_text()
+		_expect(text.contains("ManagementSummaryDirector=\"*res://scripts/management_summary_director.gd\""), "management summary director must remain autoloaded")
+		_expect(text.contains("StandingsSummaryDirector=\"*res://scripts/standings_summary_director.gd\""), "standings summary director must remain autoloaded")
+
+func _test_standings_summary() -> void:
+	var table := [
+		{"id":"sun_serpents","name":"Sun Serpents","played":5,"for":20,"against":20,"points":7},
+		{"id":"jaguar_house","name":"Jaguar House","played":5,"for":24,"against":18,"points":10},
+		{"id":"obsidian_guard","name":"Obsidian Guard","played":5,"for":22,"against":17,"points":10},
+		{"id":"quetzal_runners","name":"Quetzal Runners","played":5,"for":17,"against":25,"points":4}
+	]
+	var rows := StandingsSummaryRules.sorted_rows(table)
+	_expect(str(rows[0].get("id", "")) == "jaguar_house", "standings should break equal points by score differential")
+	var line := StandingsSummaryRules.row_line(rows[0], 1)
+	_expect(line.begins_with(">1") and line.contains("P05") and line.contains("D+06") and line.contains("10PTS"), "standings line should expose user marker played differential and points")
+	_expect(StandingsSummaryRules.playoff_cutoff_line(4, 4) == "PLAYOFF CUT: TOP 4", "standings should expose authored playoff cutoff")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
