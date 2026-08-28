@@ -1,6 +1,7 @@
 extends SceneTree
 
 const SeasonSaveScript = preload("res://scripts/season_save.gd")
+const SeasonDirectorScript = preload("res://scripts/season_director.gd")
 
 class FakeSeason:
 	extends Node
@@ -37,6 +38,28 @@ func _initialize() -> void:
 	_expect(invalid.get("semifinal_winners", []).is_empty(), "unknown semifinal winners should be rejected")
 	_expect(str(invalid.get("champion_id", "")) == "", "unknown champion should be rejected")
 	_expect(not bool(invalid.get("championship_purse_paid", true)), "purse-paid flag should be false when champion is invalid")
+
+	var director = SeasonDirectorScript.new()
+	director.restore_postseason_state(clean)
+	var state := director.postseason_state()
+	_expect(state.get("semifinal_winners", []).size() == 2, "season director should restore semifinal winners through public API")
+	_expect(str(state.get("champion_id", "")) == "jaguar_house", "season director public API should expose champion")
+	_expect(bool(state.get("championship_purse_paid", false)), "season director public API should expose purse state")
+	var winners: Array = state.get("semifinal_winners", [])
+	winners.clear()
+	_expect(director.postseason_state().get("semifinal_winners", []).size() == 2, "postseason_state should return a defensive copy")
+
+	var save_file := FileAccess.open("res://scripts/season_save.gd", FileAccess.READ)
+	_expect(save_file != null, "season_save.gd should be readable for canonical API check")
+	if save_file != null:
+		var source := save_file.get_as_text()
+		_expect(source.contains('has_method("postseason_state")') and source.contains('has_method("restore_postseason_state")'), "canonical save should use SeasonDirector public postseason API")
+		_expect(not source.contains('director.get("_semifinal_winners")'), "canonical save must not read private semifinal state")
+		_expect(not source.contains('director.get("_champion_id")'), "canonical save must not read private champion state")
+		_expect(not source.contains('director.set("_semifinal_winners"'), "canonical save must not write private semifinal state")
+		_expect(not source.contains('director.set("_champion_id"'), "canonical save must not write private champion state")
+
+	director.free()
 	fake.free()
 	saver.free()
 	if failures.is_empty():
