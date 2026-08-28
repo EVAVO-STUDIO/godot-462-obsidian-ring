@@ -7,12 +7,22 @@ static func roster_for_team(rosters: Array, team_id: String) -> Dictionary:
 			return roster
 	return {}
 
+static func ordered_players(roster: Dictionary) -> Array:
+	var healthy: Array = []
+	var injured: Array = []
+	for player in roster.get("players", []):
+		if int(player.get("injury_matches", 0)) > 0:
+			injured.append(player)
+		else:
+			healthy.append(player)
+	return healthy + injured
+
 static func active_three(roster: Dictionary) -> Array:
-	var players: Array = roster.get("players", [])
+	var players := ordered_players(roster)
 	return players.slice(0, mini(3, players.size()))
 
 static func bench(roster: Dictionary) -> Array:
-	var players: Array = roster.get("players", [])
+	var players := ordered_players(roster)
 	if players.size() <= 3:
 		return []
 	return players.slice(3, players.size())
