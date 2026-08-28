@@ -3,7 +3,7 @@
     {
       "id": "jaguar_house",
       "name": "Jaguar House",
-      "home_court": "basalt_court",
+      "home_court": "sunken_stone",
       "attack": 7,
       "defence": 8,
       "speed": 6,
@@ -13,7 +13,7 @@
     {
       "id": "quetzal_runners",
       "name": "Quetzal Runners",
-      "home_court": "painted_court",
+      "home_court": "high_temple",
       "attack": 8,
       "defence": 5,
       "speed": 9,
@@ -23,7 +23,7 @@
     {
       "id": "obsidian_guard",
       "name": "Obsidian Guard",
-      "home_court": "temple_court",
+      "home_court": "obsidian_gate",
       "attack": 6,
       "defence": 9,
       "speed": 5,
@@ -33,7 +33,7 @@
     {
       "id": "sun_serpents",
       "name": "Sun Serpents",
-      "home_court": "sunken_court",
+      "home_court": "rain_court",
       "attack": 9,
       "defence": 5,
       "speed": 8,
