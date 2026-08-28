@@ -91,14 +91,10 @@ func _sanitize_rosters(scene: Object, saved) -> Array:
 
 func _postseason_snapshot() -> Dictionary:
 	var director := get_node_or_null("/root/SeasonDirector")
-	if director == null:
+	if director == null or not director.has_method("postseason_state"):
 		return {"semifinal_winners": [], "champion_id": "", "championship_purse_paid": false}
-	var winners = director.get("_semifinal_winners")
-	return {
-		"semifinal_winners": winners.duplicate(true) if typeof(winners) == TYPE_ARRAY else [],
-		"champion_id": str(director.get("_champion_id")),
-		"championship_purse_paid": bool(director.get("_championship_purse_paid"))
-	}
+	var state = director.call("postseason_state")
+	return state.duplicate(true) if typeof(state) == TYPE_DICTIONARY else {"semifinal_winners": [], "champion_id": "", "championship_purse_paid": false}
 
 func _sanitize_postseason(scene: Object, saved) -> Dictionary:
 	var valid_ids := _valid_team_ids(scene)
@@ -184,8 +180,6 @@ func _restore(scene: Object) -> void:
 
 func _restore_postseason_deferred(postseason: Dictionary) -> void:
 	var director := get_node_or_null("/root/SeasonDirector")
-	if director == null:
+	if director == null or not director.has_method("restore_postseason_state"):
 		return
-	director.set("_semifinal_winners", postseason.get("semifinal_winners", []).duplicate(true))
-	director.set("_champion_id", str(postseason.get("champion_id", "")))
-	director.set("_championship_purse_paid", bool(postseason.get("championship_purse_paid", false)))
+	director.call("restore_postseason_state", postseason)
