@@ -8,6 +8,7 @@ const RosterRules = preload("res://scripts/roster_rules.gd")
 const DisciplineRules = preload("res://scripts/discipline_rules.gd")
 const PlayoffRules = preload("res://scripts/playoff_rules.gd")
 const FatigueDirector = preload("res://scripts/fatigue_director.gd")
+const ConditionRules = preload("res://scripts/condition_rules.gd")
 
 var failures: Array[String] = []
 
@@ -20,6 +21,7 @@ func _initialize() -> void:
 	_test_discipline()
 	_test_playoffs()
 	_test_fatigue()
+	_test_condition()
 	if failures.is_empty():
 		print("Obsidian Ring runtime self-test passed.")
 		quit(0)
@@ -128,3 +130,11 @@ func _test_fatigue() -> void:
 	_expect(tired < fresh and tired > exhausted, "performance should degrade progressively with low stamina")
 	_expect(exhausted >= 0.70, "fatigue floor should remain playable")
 	fatigue.free()
+
+func _test_condition() -> void:
+	_expect(ConditionRules.carry_from_end_stamina(70.0) == 0, "well-rested finish should not create next-match fatigue")
+	var exhausted_carry := ConditionRules.carry_from_end_stamina(0.0)
+	_expect(exhausted_carry > 0 and exhausted_carry <= ConditionRules.MAX_FATIGUE_CARRY, "exhausted finish should create bounded fatigue carry")
+	_expect(ConditionRules.recover_bench_carry(30) < 30, "bench recovery should reduce carried fatigue")
+	var starting := ConditionRules.starting_stamina(exhausted_carry)
+	_expect(starting < 100.0 and starting >= ConditionRules.STARTING_STAMINA_FLOOR, "carried fatigue should reduce next-match stamina without making player unusable")
