@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "courts": [
+    {"id":"sunken_stone","name":"Sunken Stone Court","surface":"packed_earth","ring_points":5,"wall_points":1,"rebound":0.82,"width":500,"height":250,"hazards":[]},
+    {"id":"obsidian_gate","name":"Obsidian Gate","surface":"stone","ring_points":5,"wall_points":1,"rebound":0.88,"width":520,"height":240,"hazards":["narrow_sidelines"]},
+    {"id":"rain_court","name":"Rain Court","surface":"wet_stone","ring_points":6,"wall_points":1,"rebound":0.76,"width":490,"height":260,"hazards":["low_friction"]},
+    {"id":"high_temple","name":"High Temple Court","surface":"painted_plaster","ring_points":5,"wall_points":2,"rebound":0.84,"width":540,"height":245,"hazards":["fast_walls"]}
+  ]
+}
