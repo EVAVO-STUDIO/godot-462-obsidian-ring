@@ -1,0 +1,55 @@
+extends SceneTree
+
+const RosterSaveRules = preload("res://scripts/roster_save_rules.gd")
+const ConditionRules = preload("res://scripts/condition_rules.gd")
+
+var failures: Array[String] = []
+
+func _initialize() -> void:
+	_test_canonical_roster_merge()
+	_test_participant_accumulation()
+	if failures.is_empty():
+		print("Obsidian Ring persistence self-test passed.")
+		quit(0)
+		return
+	for failure in failures:
+		push_error(failure)
+	quit(1)
+
+func _test_canonical_roster_merge() -> void:
+	var canonical := [{
+		"team_id":"jaguar_house",
+		"players":[
+			{"id":"p1","name":"ONE","role":"runner","skill":5,"injury_matches":0,"fatigue_carry":0},
+			{"id":"p2","name":"TWO","role":"guard","skill":4,"injury_matches":0,"fatigue_carry":0},
+			{"id":"p3","name":"THREE","role":"striker","skill":6,"injury_matches":0,"fatigue_carry":0}
+		]
+	}]
+	var saved := [{
+		"team_id":"jaguar_house",
+		"players":[
+			{"id":"p1","name":"CORRUPTED NAME","role":"striker","skill":9,"injury_matches":2,"fatigue_carry":14},
+			{"id":"p3","skill":99,"fatigue_carry":99},
+			{"id":"unknown","skill":10}
+		]
+	}]
+	var merged := RosterSaveRules.merge_rosters(canonical, saved)
+	var players: Array = merged[0].get("players", [])
+	_expect(players.size() == 3, "incomplete save must not delete canonical bench players")
+	_expect(str(players[0].get("name", "")) == "ONE" and str(players[0].get("role", "")) == "runner", "saved state must not replace canonical player identity or role")
+	_expect(int(players[0].get("skill", 0)) == 9 and int(players[0].get("injury_matches", 0)) == 2 and int(players[0].get("fatigue_carry", 0)) == 14, "mutable saved player state should merge by ID")
+	_expect(str(players[1].get("id", "")) == "p2" and int(players[1].get("skill", 0)) == 4, "missing saved player must remain canonical and unchanged")
+	_expect(int(players[2].get("skill", 0)) == 10 and int(players[2].get("fatigue_carry", 0)) == 40, "restored mutable fields should clamp to safe ranges")
+
+func _test_participant_accumulation() -> void:
+	var captured: Dictionary = {}
+	captured = ConditionRules.capture_stamina(captured, [{"id":"starter","stamina":31.0},{"id":"other","stamina":80.0}])
+	captured = ConditionRules.capture_stamina(captured, [{"id":"substitute","stamina":72.0},{"id":"other","stamina":64.0}])
+	_expect(captured.has("starter"), "substituted-out participant must remain in match stamina accumulator")
+	_expect(absf(float(captured["starter"]) - 31.0) < 0.001, "substituted-out participant should retain last observed stamina")
+	_expect(absf(float(captured["other"]) - 64.0) < 0.001, "active participant stamina should update to latest observation")
+	_expect(ConditionRules.carry_from_end_stamina(float(captured["starter"])) > 0, "tired substituted-out participant should receive fatigue carry rather than bench recovery")
+
+func _expect(condition: bool, message: String) -> void:
+	if not condition:
+		failures.append(message)
