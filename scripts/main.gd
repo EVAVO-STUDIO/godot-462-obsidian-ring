@@ -12,6 +12,10 @@ var away_score := 0
 var match_time := 180.0
 var possession := false
 
+func _ready() -> void:
+	_configure_input()
+	queue_redraw()
+
 func _process(delta: float) -> void:
 	match_time = maxf(0.0, match_time - delta)
 
@@ -38,6 +42,27 @@ func _process(delta: float) -> void:
 		_check_ring_score()
 
 	queue_redraw()
+
+func _configure_input() -> void:
+	_add_key_action("move_left", KEY_A)
+	_add_key_action("move_left", KEY_LEFT)
+	_add_key_action("move_right", KEY_D)
+	_add_key_action("move_right", KEY_RIGHT)
+	_add_key_action("move_up", KEY_W)
+	_add_key_action("move_up", KEY_UP)
+	_add_key_action("move_down", KEY_S)
+	_add_key_action("move_down", KEY_DOWN)
+	_add_key_action("pass_ball", KEY_SPACE)
+	_add_key_action("strike_ball", KEY_X)
+	_add_key_action("tackle", KEY_Z)
+
+func _add_key_action(action: StringName, keycode: Key) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventKey.new()
+	event.physical_keycode = keycode
+	if not InputMap.action_has_event(action, event):
+		InputMap.action_add_event(action, event)
 
 func _bounce_ball() -> void:
 	if ball_position.x < COURT.position.x + BALL_RADIUS:
