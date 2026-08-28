@@ -81,9 +81,9 @@ func _update_ball(delta: float) -> void:
 		return
 	ball_position += ball_velocity * delta
 	ball_velocity = ball_velocity.move_toward(Vector2.ZERO, 92.0 * delta)
-	_bounce_ball()
 	_check_ring_score()
 	_check_end_zone_score()
+	_bounce_ball()
 
 func _resolve_possession() -> void:
 	if possession_owner != 0 or ball_velocity.length() > 62.0:
