@@ -273,21 +273,29 @@ func _table_row(table: Array, id: String) -> Dictionary:
 			return row
 	return {"id": id, "name": id, "for": 0, "against": 0}
 
+func postseason_state() -> Dictionary:
+	return {
+		"semifinal_winners": _semifinal_winners.duplicate(true),
+		"champion_id": _champion_id,
+		"championship_purse_paid": _championship_purse_paid
+	}
+
+func restore_postseason_state(state: Dictionary) -> void:
+	var winners = state.get("semifinal_winners", [])
+	_semifinal_winners = winners.duplicate(true) if typeof(winners) == TYPE_ARRAY else []
+	_champion_id = str(state.get("champion_id", ""))
+	_championship_purse_paid = bool(state.get("championship_purse_paid", false))
+
 func _save_state() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		return
-	file.store_string(JSON.stringify({
-		"version": SAVE_VERSION,
-		"semifinal_winners": _semifinal_winners,
-		"champion_id": _champion_id,
-		"championship_purse_paid": _championship_purse_paid
-	}, "  "))
+	var state := postseason_state()
+	state["version"] = SAVE_VERSION
+	file.store_string(JSON.stringify(state, "  "))
 
 func _load_state() -> void:
-	_semifinal_winners.clear()
-	_champion_id = ""
-	_championship_purse_paid = false
+	restore_postseason_state({})
 	if not FileAccess.file_exists(SAVE_PATH):
 		return
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
@@ -299,14 +307,7 @@ func _load_state() -> void:
 	var version := int(parsed.get("version", 0))
 	if version < 1 or version > SAVE_VERSION:
 		return
-	var winners = parsed.get("semifinal_winners", [])
-	if typeof(winners) == TYPE_ARRAY:
-		for winner in winners:
-			var id := str(winner)
-			if id != "" and id not in _semifinal_winners:
-				_semifinal_winners.append(id)
-	_champion_id = str(parsed.get("champion_id", ""))
-	_championship_purse_paid = bool(parsed.get("championship_purse_paid", false))
+	restore_postseason_state(parsed)
 
 func _has_property(object: Object, property_name: String) -> bool:
 	for property in object.get_property_list():
