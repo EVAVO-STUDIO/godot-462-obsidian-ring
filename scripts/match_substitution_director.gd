@@ -68,15 +68,17 @@ func _substitute_player(scene: Object, active_index: int, emergency: bool) -> bo
 	if active.is_empty() or active_index < 0 or active_index >= active.size() or _remaining <= 0:
 		return false
 	var outgoing: Dictionary = active[active_index]
-	var outgoing_role := str(outgoing.get("role", ""))
 	var roster := RosterRules.roster_for_team(scene.get("roster_state"), USER_TEAM_ID)
 	var bench := RosterRules.bench(roster)
 	var active_ids: Dictionary = {}
 	for player in active:
 		active_ids[str(player.get("id", ""))] = true
-	var candidate := _best_candidate(bench, active_ids, outgoing_role, true)
-	if candidate.is_empty():
-		candidate = _best_candidate(bench, active_ids, outgoing_role, false)
+	var candidate := RosterRules.best_substitute_candidate(
+		bench,
+		active_ids,
+		_used_player_ids,
+		str(outgoing.get("role", ""))
+	)
 	if candidate.is_empty():
 		if not emergency:
 			_set_status(scene, "NO ELIGIBLE SUBSTITUTE")
@@ -93,20 +95,6 @@ func _substitute_player(scene: Object, active_index: int, emergency: bool) -> bo
 	var prefix := "AUTO SUB" if emergency else "SUB"
 	_set_status(scene, "%s %s FOR %s  %d LEFT" % [prefix, str(candidate.get("name", "PLAYER")).to_upper(), str(outgoing.get("name", "PLAYER")).to_upper(), _remaining])
 	return true
-
-func _best_candidate(bench: Array, active_ids: Dictionary, preferred_role: String, require_role_match: bool) -> Dictionary:
-	var candidate: Dictionary = {}
-	for spec in bench:
-		var id := str(spec.get("id", ""))
-		if id == "" or active_ids.has(id) or _used_player_ids.has(id):
-			continue
-		if int(spec.get("injury_matches", 0)) > 0 or int(spec.get("suspension_matches", 0)) > 0:
-			continue
-		if require_role_match and str(spec.get("role", "")) != preferred_role:
-			continue
-		if candidate.is_empty() or int(spec.get("skill", 1)) > int(candidate.get("skill", 1)):
-			candidate = spec
-	return candidate
 
 func remaining_substitutions() -> int:
 	return _remaining
