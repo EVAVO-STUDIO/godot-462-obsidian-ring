@@ -40,15 +40,19 @@ func _terminal_reason(scene: Object) -> String:
 	var season_rounds := maxi(1, int(league_cfg.get("season_rounds", 10)))
 	var playoff_teams := maxi(0, int(league_cfg.get("playoff_teams", 4)))
 	var table := LeagueRules.sorted_table(scene.get("league_table"))
-	var semifinal_winners: Array = []
-	var champion_id := ""
-	var season_director := get_node_or_null("/root/SeasonDirector")
-	if season_director != null:
-		var winners = season_director.get("_semifinal_winners")
-		if typeof(winners) == TYPE_ARRAY:
-			semifinal_winners = winners
-		champion_id = str(season_director.get("_champion_id"))
+	var postseason := _postseason_state()
+	var semifinal_winners = postseason.get("semifinal_winners", [])
+	if typeof(semifinal_winners) != TYPE_ARRAY:
+		semifinal_winners = []
+	var champion_id := str(postseason.get("champion_id", ""))
 	return SeasonEndRules.terminal_reason(int(scene.get("match_number")), season_rounds, table, playoff_teams, semifinal_winners, champion_id)
+
+func _postseason_state() -> Dictionary:
+	var director := get_node_or_null("/root/SeasonDirector")
+	if director == null or not director.has_method("postseason_state"):
+		return {}
+	var state = director.call("postseason_state")
+	return state if typeof(state) == TYPE_DICTIONARY else {}
 
 func _block_confirm() -> void:
 	if _confirm_blocked or not InputMap.has_action("confirm"):
