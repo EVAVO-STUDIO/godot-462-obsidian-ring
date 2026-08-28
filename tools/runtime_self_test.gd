@@ -1,5 +1,6 @@
 extends SceneTree
 
+const ContentCatalog = preload("res://scripts/content_catalog.gd")
 const MatchRules = preload("res://scripts/match_rules.gd")
 const TeamPlayRules = preload("res://scripts/team_play_rules.gd")
 const LeagueRules = preload("res://scripts/league_rules.gd")
@@ -10,6 +11,7 @@ const PlayoffRules = preload("res://scripts/playoff_rules.gd")
 var failures: Array[String] = []
 
 func _initialize() -> void:
+	_test_content()
 	_test_match_rules()
 	_test_team_play()
 	_test_league()
@@ -27,6 +29,22 @@ func _initialize() -> void:
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)
+
+func _test_content() -> void:
+	var teams = ContentCatalog.load_json("res://data/teams.json")
+	var rules = ContentCatalog.load_json("res://data/rules.json")
+	var courts = ContentCatalog.load_json("res://data/courts.json")
+	var league = ContentCatalog.load_json("res://data/league.json")
+	var roles = ContentCatalog.load_json("res://data/player_roles.json")
+	var rosters = ContentCatalog.load_json("res://data/rosters.json")
+	var fixtures = ContentCatalog.load_json("res://data/fixtures.json")
+	_expect(typeof(teams) == TYPE_DICTIONARY and not teams.get("teams", []).is_empty(), "teams catalogue should load through ContentCatalog")
+	_expect(typeof(rules) == TYPE_DICTIONARY and not rules.get("rulesets", []).is_empty(), "rules catalogue should load through ContentCatalog")
+	_expect(typeof(courts) == TYPE_DICTIONARY and not courts.get("courts", []).is_empty(), "courts catalogue should load through ContentCatalog")
+	_expect(typeof(league) == TYPE_DICTIONARY and typeof(league.get("league", {})) == TYPE_DICTIONARY, "league catalogue should load through ContentCatalog")
+	_expect(typeof(roles) == TYPE_DICTIONARY and not roles.get("roles", []).is_empty(), "player roles should load through ContentCatalog")
+	_expect(typeof(rosters) == TYPE_DICTIONARY and not rosters.get("rosters", []).is_empty(), "rosters should load through ContentCatalog")
+	_expect(typeof(fixtures) == TYPE_DICTIONARY and not fixtures.get("rounds", []).is_empty(), "fixtures should load through ContentCatalog")
 
 func _test_match_rules() -> void:
 	_expect(MatchRules.clamp_stamina(120.0) == 100.0, "stamina should clamp to one hundred")
