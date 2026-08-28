@@ -1,5 +1,6 @@
 extends Node
 
+const RosterSaveRules = preload("res://scripts/roster_save_rules.gd")
 const SAVE_PATH := "user://obsidian_ring_season.json"
 const SAVE_VERSION := 3
 const SAVE_INTERVAL := 1.0
@@ -62,21 +63,6 @@ func _valid_team_ids(scene: Object) -> Dictionary:
 					result[id] = true
 	return result
 
-func _valid_player_ids(scene: Object) -> Dictionary:
-	var result: Dictionary = {}
-	var rosters = scene.get("roster_state")
-	if typeof(rosters) != TYPE_ARRAY:
-		return result
-	for roster in rosters:
-		if typeof(roster) != TYPE_DICTIONARY:
-			continue
-		for player in roster.get("players", []):
-			if typeof(player) == TYPE_DICTIONARY:
-				var id := str(player.get("id", ""))
-				if id != "":
-					result[id] = true
-	return result
-
 func _sanitize_table(scene: Object, saved) -> Array:
 	if typeof(saved) != TYPE_ARRAY:
 		return scene.get("league_table")
@@ -97,40 +83,8 @@ func _sanitize_table(scene: Object, saved) -> Array:
 	return result if result.size() == valid_ids.size() else scene.get("league_table")
 
 func _sanitize_rosters(scene: Object, saved) -> Array:
-	if typeof(saved) != TYPE_ARRAY:
-		return scene.get("roster_state")
-	var valid_team_ids := _valid_team_ids(scene)
-	var current_players := _valid_player_ids(scene)
-	var result: Array = []
-	var seen_teams: Dictionary = {}
-	var seen_players: Dictionary = {}
-	for roster in saved:
-		if typeof(roster) != TYPE_DICTIONARY:
-			continue
-		var team_id := str(roster.get("team_id", ""))
-		if not valid_team_ids.has(team_id) or seen_teams.has(team_id):
-			continue
-		var next_players: Array = []
-		for player in roster.get("players", []):
-			if typeof(player) != TYPE_DICTIONARY:
-				continue
-			var id := str(player.get("id", ""))
-			if not current_players.has(id) or seen_players.has(id):
-				continue
-			seen_players[id] = true
-			var next := player.duplicate(true)
-			next["skill"] = clampi(int(next.get("skill", 1)), 1, 10)
-			next["injury_matches"] = maxi(0, int(next.get("injury_matches", 0)))
-			next["suspension_matches"] = maxi(0, int(next.get("suspension_matches", 0)))
-			next["booking_points"] = maxi(0, int(next.get("booking_points", 0)))
-			next["suspensions_served"] = maxi(0, int(next.get("suspensions_served", 0)))
-			next["fatigue_carry"] = clampi(int(next.get("fatigue_carry", 0)), 0, 40)
-			next_players.append(next)
-		if next_players.size() < 3:
-			continue
-		seen_teams[team_id] = true
-		result.append({"team_id": team_id, "players": next_players})
-	return result if result.size() == valid_team_ids.size() else scene.get("roster_state")
+	var canonical = scene.get("roster_state")
+	return RosterSaveRules.merge_rosters(canonical, saved)
 
 func _postseason_snapshot() -> Dictionary:
 	var director := get_node_or_null("/root/SeasonDirector")
