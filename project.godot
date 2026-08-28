@@ -20,6 +20,7 @@ ReplayGuardDirector="*res://scripts/replay_guard_director.gd"
 FoulLedgerDirector="*res://scripts/foul_ledger_director.gd"
 SeasonEndDirector="*res://scripts/season_end_director.gd"
 ManagementSummaryDirector="*res://scripts/management_summary_director.gd"
+StandingsSummaryDirector="*res://scripts/standings_summary_director.gd"
 
 [display]
 window/size/viewport_width=640
