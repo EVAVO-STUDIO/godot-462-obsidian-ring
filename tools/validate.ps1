@@ -26,7 +26,8 @@ $Required = @(
     'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
-    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd',
+    'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -56,9 +57,7 @@ $AllowedHazards = @('narrow_sidelines','low_friction','fast_walls')
 foreach ($Court in $Courts.courts) {
     if ([double]$Court.width -le 0 -or [double]$Court.height -le 0) { throw "Court dimensions must be positive: $($Court.id)" }
     if ([double]$Court.rebound -le 0 -or [double]$Court.rebound -gt 1.25) { throw "Court rebound out of range: $($Court.id)" }
-    foreach ($Hazard in @($Court.hazards)) {
-        if ($AllowedHazards -notcontains $Hazard) { throw "Unknown court hazard: $($Court.id) -> $Hazard" }
-    }
+    foreach ($Hazard in @($Court.hazards)) { if ($AllowedHazards -notcontains $Hazard) { throw "Unknown court hazard: $($Court.id) -> $Hazard" } }
 }
 foreach ($Team in $Teams.teams) {
     if ($CourtIds -notcontains $Team.home_court) { throw "Unknown team home court: $($Team.id) -> $($Team.home_court)" }
@@ -73,8 +72,7 @@ foreach ($Role in $Roles.roles) {
     if ([int]$Role.toughness -lt 1 -or [int]$Role.toughness -gt 10) { throw "Role toughness out of range: $($Role.id)" }
 }
 
-$RosterTeams = @()
-$PlayerIds = @()
+$RosterTeams = @(); $PlayerIds = @()
 foreach ($Roster in $Rosters.rosters) {
     if ($TeamIds -notcontains $Roster.team_id) { throw "Roster references unknown team: $($Roster.team_id)" }
     if ($RosterTeams -contains $Roster.team_id) { throw "Duplicate roster: $($Roster.team_id)" }
@@ -86,9 +84,7 @@ foreach ($Roster in $Rosters.rosters) {
         if (-not $Player.id -or -not $Player.name) { throw "Player missing id/name: $($Roster.team_id)" }
         if ($RoleIds -notcontains $Player.role) { throw "Unknown player role: $($Player.id) -> $($Player.role)" }
         if ([int]$Player.skill -lt 1 -or [int]$Player.skill -gt 10) { throw "Player skill out of range: $($Player.id)" }
-        foreach ($Field in @('injury_matches','suspension_matches','booking_points','fatigue_carry')) {
-            if ($null -ne $Player.$Field -and [int]$Player.$Field -lt 0) { throw "Negative player state: $($Player.id).$Field" }
-        }
+        foreach ($Field in @('injury_matches','suspension_matches','booking_points','fatigue_carry')) { if ($null -ne $Player.$Field -and [int]$Player.$Field -lt 0) { throw "Negative player state: $($Player.id).$Field" } }
         if ($null -ne $Player.fatigue_carry -and [int]$Player.fatigue_carry -gt 40) { throw "fatigue_carry out of range: $($Player.id)" }
         $PlayerIds += $Player.id
     }
@@ -96,9 +92,7 @@ foreach ($Roster in $Rosters.rosters) {
 if (@($RosterTeams | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw 'Every team must have exactly one roster.' }
 if (@($PlayerIds | Sort-Object -Unique).Count -ne $PlayerIds.Count) { throw 'Player IDs must be globally unique.' }
 
-$League = $LeagueData.league
-$Career = $LeagueData.career
-$Playoffs = $LeagueData.playoffs
+$League = $LeagueData.league; $Career = $LeagueData.career; $Playoffs = $LeagueData.playoffs
 if ([int]$League.win_points -le [int]$League.draw_points) { throw 'win_points must exceed draw_points.' }
 if ([int]$League.draw_points -lt [int]$League.loss_points) { throw 'draw_points cannot be below loss_points.' }
 if ([int]$League.playoff_teams -ne 4) { throw 'Current playoff implementation requires four qualifiers.' }
@@ -128,60 +122,38 @@ if (@($Fixtures.rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture r
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 foreach ($Autoload in @(
-    'SeasonSave="*res://scripts/season_save.gd"',
-    'SeasonDirector="*res://scripts/season_director.gd"',
-    'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"',
-    'ConditionDirector="*res://scripts/condition_director.gd"',
-    'FatigueDirector="*res://scripts/fatigue_director.gd"',
-    'CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
-    'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"'
-)) {
-    if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
-}
+    'SeasonSave="*res://scripts/season_save.gd"','SeasonDirector="*res://scripts/season_director.gd"',
+    'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
+    'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
+    'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"'
+)) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
+
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) {
-    if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" }
-}
+foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" } }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
-foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) {
-    if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" }
-}
+foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
 $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
-foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) {
-    if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" }
-}
+foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) { if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" } }
 $ConditionRulesText = Get-Content -Raw (Join-Path $Root 'scripts/condition_rules.gd')
-foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina')) {
-    if (-not $ConditionRulesText.Contains($Token)) { throw "Condition rules missing token: $Token" }
-}
+foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina')) { if (-not $ConditionRulesText.Contains($Token)) { throw "Condition rules missing token: $Token" } }
 $ConditionDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/condition_director.gd')
-foreach ($Token in @('_capture_end_condition','_apply_starting_condition','fatigue_carry','ConditionRules.starting_stamina')) {
-    if (-not $ConditionDirectorText.Contains($Token)) { throw "Condition director missing token: $Token" }
-}
+foreach ($Token in @('_capture_end_condition','_apply_starting_condition','fatigue_carry','ConditionRules.starting_stamina')) { if (-not $ConditionDirectorText.Contains($Token)) { throw "Condition director missing token: $Token" } }
 $FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
-foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) {
-    if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" }
-}
+foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) { if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" } }
 $HazardRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_rules.gd')
-foreach ($Token in @('low_friction_drag_compensation','effective_rebound','vertical_margin')) {
-    if (-not $HazardRulesText.Contains($Token)) { throw "Court hazard rules missing token: $Token" }
-}
+foreach ($Token in @('low_friction_drag_compensation','effective_rebound','vertical_margin')) { if (-not $HazardRulesText.Contains($Token)) { throw "Court hazard rules missing token: $Token" } }
 $HazardDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_director.gd')
-foreach ($Token in @('low_friction','fast_walls','narrow_sidelines','wall_rebound')) {
-    if (-not $HazardDirectorText.Contains($Token)) { throw "Court hazard director missing token: $Token" }
-}
+foreach ($Token in @('low_friction','fast_walls','narrow_sidelines','wall_rebound')) { if (-not $HazardDirectorText.Contains($Token)) { throw "Court hazard director missing token: $Token" } }
 $GeometryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_rules.gd')
-foreach ($Token in @('REFERENCE_WIDTH','REFERENCE_HEIGHT','movement_rect','clamp_player')) {
-    if (-not $GeometryRulesText.Contains($Token)) { throw "Court geometry rules missing token: $Token" }
-}
+foreach ($Token in @('REFERENCE_WIDTH','REFERENCE_HEIGHT','movement_rect','clamp_player')) { if (-not $GeometryRulesText.Contains($Token)) { throw "Court geometry rules missing token: $Token" } }
 $GeometryDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_director.gd')
-foreach ($Token in @('CourtGeometryRules.movement_rect','CourtGeometryRules.clamp_player','home_players','away_players')) {
-    if (-not $GeometryDirectorText.Contains($Token)) { throw "Court geometry director missing token: $Token" }
-}
+foreach ($Token in @('CourtGeometryRules.movement_rect','CourtGeometryRules.clamp_player','home_players','away_players')) { if (-not $GeometryDirectorText.Contains($Token)) { throw "Court geometry director missing token: $Token" } }
+$FixtureRulesText = Get-Content -Raw (Join-Path $Root 'scripts/fixture_simulation_rules.gd')
+foreach ($Token in @('deterministic_score','simulate_fixture','fixture_needs_simulation','team_played')) { if (-not $FixtureRulesText.Contains($Token)) { throw "Fixture simulation rules missing token: $Token" } }
+$FixtureDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/fixture_simulation_director.gd')
+foreach ($Token in @('_simulate_other_fixture','FixtureSimulationRules.fixture_needs_simulation','FixtureSimulationRules.simulate_fixture','LeagueRules.record_result')) { if (-not $FixtureDirectorText.Contains($Token)) { throw "Fixture simulation director missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) {
-    if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" }
-}
+foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" } }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
@@ -194,6 +166,9 @@ if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with ex
 Write-Host 'Running court hazard/geometry self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/court_hazard_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring court self-test failed with exit code $LASTEXITCODE" }
+Write-Host 'Running AI fixture simulation self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/fixture_simulation_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring fixture simulation self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running Godot editor smoke test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --editor --quit
 if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
