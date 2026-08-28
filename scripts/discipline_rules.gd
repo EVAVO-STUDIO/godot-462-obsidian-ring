@@ -1,6 +1,19 @@
 class_name DisciplineRules
 extends RefCounted
 
+static var _booking_threshold := 3
+static var _suspension_length := 1
+
+static func configure(booking_threshold: int, suspension_length: int) -> void:
+	_booking_threshold = maxi(1, booking_threshold)
+	_suspension_length = maxi(1, suspension_length)
+
+static func booking_threshold() -> int:
+	return _booking_threshold
+
+static func suspension_length() -> int:
+	return _suspension_length
+
 static func booking_points_for_foul(force: float, discipline: float) -> int:
 	var severity := force - discipline * 8.0
 	if severity >= 190.0:
@@ -9,22 +22,26 @@ static func booking_points_for_foul(force: float, discipline: float) -> int:
 		return 1
 	return 0
 
-static func suspension_matches(total_booking_points: int, previous_suspensions: int = 0) -> int:
-	var threshold := 3 + previous_suspensions
+static func suspension_matches(total_booking_points: int, booking_threshold_override: int = -1, suspension_length_override: int = -1) -> int:
+	var threshold := _booking_threshold if booking_threshold_override < 1 else booking_threshold_override
+	var length := _suspension_length if suspension_length_override < 1 else suspension_length_override
 	if total_booking_points < threshold:
 		return 0
-	return 1 + int((total_booking_points - threshold) / 3)
+	return maxi(1, length)
 
-static func apply_booking(player: Dictionary, booking_points: int) -> Dictionary:
+static func apply_booking(player: Dictionary, booking_points: int, booking_threshold_override: int = -1, suspension_length_override: int = -1) -> Dictionary:
 	var next := player.duplicate(true)
-	var current := int(next.get("booking_points", 0))
-	next["booking_points"] = maxi(0, current + booking_points)
-	var prior := int(next.get("suspensions_served", 0))
-	var suspension := suspension_matches(int(next["booking_points"]), prior)
-	if suspension > int(next.get("suspension_matches", 0)):
-		next["suspension_matches"] = suspension
-		next["booking_points"] = 0
-		next["suspensions_served"] = prior + 1
+	var threshold := _booking_threshold if booking_threshold_override < 1 else booking_threshold_override
+	var length := _suspension_length if suspension_length_override < 1 else suspension_length_override
+	var current := maxi(0, int(next.get("booking_points", 0)))
+	var total := maxi(0, current + maxi(0, booking_points))
+	next["booking_points"] = total
+	if total < threshold:
+		return next
+	var existing_suspension := maxi(0, int(next.get("suspension_matches", 0)))
+	next["suspension_matches"] = maxi(existing_suspension, length)
+	next["booking_points"] = maxi(0, total - threshold)
+	next["suspensions_served"] = maxi(0, int(next.get("suspensions_served", 0))) + 1
 	return next
 
 static func serve_round(player: Dictionary) -> Dictionary:
