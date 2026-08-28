@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "roles": [
+    {"id":"runner","speed":1.10,"stamina":0.95,"tackle":0.85,"passing":1.10,"shooting":0.90,"toughness":5},
+    {"id":"striker","speed":1.00,"stamina":1.00,"tackle":0.90,"passing":1.00,"shooting":1.18,"toughness":6},
+    {"id":"guard","speed":0.88,"stamina":1.12,"tackle":1.22,"passing":0.90,"shooting":0.82,"toughness":9}
+  ]
+}
