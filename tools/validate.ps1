@@ -23,11 +23,12 @@ Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/roster_save_rules.gd',
-    'scripts/discipline_rules.gd','scripts/discipline_policy_director.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
+    'scripts/discipline_rules.gd','scripts/discipline_policy_director.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/save_recovery_rules.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
     'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
+    'scripts/foul_ledger_rules.gd','scripts/foul_ledger_director.gd','scripts/management_summary_rules.gd','scripts/management_summary_director.gd','scripts/standings_summary_rules.gd','scripts/standings_summary_director.gd',
     'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd','tools/discipline_policy_self_test.gd','tools/persistence_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
@@ -127,7 +128,9 @@ foreach ($Autoload in @(
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
     'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"',
-    'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"','SeasonEndDirector="*res://scripts/season_end_director.gd"'
+    'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"','FoulLedgerDirector="*res://scripts/foul_ledger_director.gd"',
+    'SeasonEndDirector="*res://scripts/season_end_director.gd"','ManagementSummaryDirector="*res://scripts/management_summary_director.gd"',
+    'StandingsSummaryDirector="*res://scripts/standings_summary_director.gd"'
 )) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
 
 $DisciplineRulesText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_rules.gd')
@@ -135,7 +138,7 @@ foreach ($Token in @('static var _booking_threshold','static var _suspension_len
 $DisciplinePolicyText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_policy_director.gd')
 foreach ($Token in @('process_priority = -250','DisciplineRules.configure','booking_threshold','suspension_matches')) { if (-not $DisciplinePolicyText.Contains($Token)) { throw "Discipline policy director missing token: $Token" } }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" } }
+foreach ($Token in @('process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration token: $Token" } }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
 $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
@@ -164,12 +167,26 @@ $ReplayRulesText = Get-Content -Raw (Join-Path $Root 'scripts/replay_guard_rules
 foreach ($Token in @('is_regular_round','make_snapshot','snapshot_valid')) { if (-not $ReplayRulesText.Contains($Token)) { throw "Replay guard rules missing token: $Token" } }
 $ReplayDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/replay_guard_director.gd')
 foreach ($Token in @('REPLAY - EXHIBITION ONLY','CAREER STATE UNCHANGED','ReplayGuardRules.make_snapshot','ReplayGuardRules.is_regular_round')) { if (-not $ReplayDirectorText.Contains($Token)) { throw "Replay guard director missing token: $Token" } }
+$FoulRulesText = Get-Content -Raw (Join-Path $Root 'scripts/foul_ledger_rules.gd')
+foreach ($Token in @('controlled_actor','ai_tackler_actor','make_event')) { if (-not $FoulRulesText.Contains($Token)) { throw "Foul ledger rules missing token: $Token" } }
+$FoulDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/foul_ledger_director.gd')
+foreach ($Token in @('process_priority = 60','MAX_EVENTS','last_home_actor_id','last_away_actor_id','latest_event')) { if (-not $FoulDirectorText.Contains($Token)) { throw "Foul ledger director missing token: $Token" } }
 $SeasonEndRulesText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_rules.gd')
 foreach ($Token in @('user_qualified','terminal_reason','NO_PLAYOFF_BERTH','SEMIFINAL_EXIT')) { if (-not $SeasonEndRulesText.Contains($Token)) { throw "Season end rules missing token: $Token" } }
 $SeasonEndDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_director.gd')
 foreach ($Token in @('process_priority = -100','action_erase_events','_semifinal_winners','_champion_id','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing token: $Token" } }
+$ManagementRulesText = Get-Content -Raw (Join-Path $Root 'scripts/management_summary_rules.gd')
+foreach ($Token in @('player_line','foul_line','postseason_line')) { if (-not $ManagementRulesText.Contains($Token)) { throw "Management summary rules missing token: $Token" } }
+$ManagementDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/management_summary_director.gd')
+foreach ($Token in @('ManagementSummaryRules.player_line','FoulLedgerDirector','SeasonDirector','PanelContainer')) { if (-not $ManagementDirectorText.Contains($Token)) { throw "Management summary director missing token: $Token" } }
+$StandingsRulesText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_rules.gd')
+foreach ($Token in @('sorted_rows','row_text','playoff_cutoff_text','score_diff')) { if (-not $StandingsRulesText.Contains($Token)) { throw "Standings summary rules missing token: $Token" } }
+$StandingsDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_director.gd')
+foreach ($Token in @('StandingsSummaryRules.sorted_rows','StandingsSummaryRules.row_text','league_table','playoff_teams')) { if (-not $StandingsDirectorText.Contains($Token)) { throw "Standings summary director missing token: $Token" } }
+$RecoveryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/save_recovery_rules.gd')
+foreach ($Token in @('parse_supported_json','choose_primary_or_backup','source')) { if (-not $RecoveryRulesText.Contains($Token)) { throw "Season save recovery rules missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('SAVE_VERSION := 3','RosterSaveRules.merge_rosters','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred','version < 2')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing canonical-state token: $Token" } }
+foreach ($Token in @('SAVE_VERSION := 3','BACKUP_PATH','SaveRecoveryRules.choose_primary_or_backup','_backup_current_primary','RosterSaveRules.merge_rosters','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing canonical recovery-state token: $Token" } }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
@@ -179,10 +196,10 @@ if (-not $Godot) {
 Write-Host 'Running deterministic runtime rules self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/runtime_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with exit code $LASTEXITCODE" }
-Write-Host 'Running discipline policy self-test...' -ForegroundColor DarkCyan
+Write-Host 'Running discipline policy/management self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/discipline_policy_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring discipline policy self-test failed with exit code $LASTEXITCODE" }
-Write-Host 'Running persistence self-test...' -ForegroundColor DarkCyan
+Write-Host 'Running persistence/recovery self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/persistence_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring persistence self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running court hazard/geometry self-test...' -ForegroundColor DarkCyan
