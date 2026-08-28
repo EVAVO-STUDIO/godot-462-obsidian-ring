@@ -27,8 +27,8 @@ $Required = @(
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
-    'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd',
-    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd',
+    'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -127,7 +127,7 @@ foreach ($Autoload in @(
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
     'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"',
-    'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"'
+    'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"','SeasonEndDirector="*res://scripts/season_end_director.gd"'
 )) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
 
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
@@ -158,6 +158,10 @@ $ReplayRulesText = Get-Content -Raw (Join-Path $Root 'scripts/replay_guard_rules
 foreach ($Token in @('is_regular_round','make_snapshot','snapshot_valid')) { if (-not $ReplayRulesText.Contains($Token)) { throw "Replay guard rules missing token: $Token" } }
 $ReplayDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/replay_guard_director.gd')
 foreach ($Token in @('REPLAY - EXHIBITION ONLY','CAREER STATE UNCHANGED','ReplayGuardRules.make_snapshot','ReplayGuardRules.is_regular_round')) { if (-not $ReplayDirectorText.Contains($Token)) { throw "Replay guard director missing token: $Token" } }
+$SeasonEndRulesText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_rules.gd')
+foreach ($Token in @('user_qualified','terminal_reason','NO_PLAYOFF_BERTH','SEMIFINAL_EXIT')) { if (-not $SeasonEndRulesText.Contains($Token)) { throw "Season end rules missing token: $Token" } }
+$SeasonEndDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_director.gd')
+foreach ($Token in @('process_priority = -100','action_erase_events','_semifinal_winners','_champion_id','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
 foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" } }
 
@@ -178,6 +182,9 @@ if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring fixture simulation self-test fai
 Write-Host 'Running replay guard self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/replay_guard_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring replay guard self-test failed with exit code $LASTEXITCODE" }
+Write-Host 'Running season-end self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/season_end_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring season-end self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running Godot editor smoke test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --editor --quit
 if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
