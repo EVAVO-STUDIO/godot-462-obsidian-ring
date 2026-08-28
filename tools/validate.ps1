@@ -23,12 +23,12 @@ Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
-    'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
+    'scripts/discipline_rules.gd','scripts/discipline_policy_director.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
     'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
-    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd','tools/discipline_policy_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -123,13 +123,17 @@ if (@($Fixtures.rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture r
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 foreach ($Autoload in @(
-    'SeasonSave="*res://scripts/season_save.gd"','SeasonDirector="*res://scripts/season_director.gd"',
+    'SeasonSave="*res://scripts/season_save.gd"','DisciplinePolicyDirector="*res://scripts/discipline_policy_director.gd"','SeasonDirector="*res://scripts/season_director.gd"',
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
     'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"',
     'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"','SeasonEndDirector="*res://scripts/season_end_director.gd"'
 )) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
 
+$DisciplineRulesText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_rules.gd')
+foreach ($Token in @('static var _booking_threshold','static var _suspension_length','configure','booking_threshold_override','suspension_length_override','total - threshold')) { if (-not $DisciplineRulesText.Contains($Token)) { throw "Discipline rules missing config token: $Token" } }
+$DisciplinePolicyText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_policy_director.gd')
+foreach ($Token in @('process_priority = -250','DisciplineRules.configure','booking_threshold','suspension_matches')) { if (-not $DisciplinePolicyText.Contains($Token)) { throw "Discipline policy director missing token: $Token" } }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
 foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" } }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
@@ -173,6 +177,9 @@ if (-not $Godot) {
 Write-Host 'Running deterministic runtime rules self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/runtime_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with exit code $LASTEXITCODE" }
+Write-Host 'Running discipline policy self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/discipline_policy_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring discipline policy self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running court hazard/geometry self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/court_hazard_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring court self-test failed with exit code $LASTEXITCODE" }
