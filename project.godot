@@ -16,6 +16,7 @@ CourtHazardDirector="*res://scripts/court_hazard_director.gd"
 CourtGeometryDirector="*res://scripts/court_geometry_director.gd"
 FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"
 ReplayGuardDirector="*res://scripts/replay_guard_director.gd"
+SeasonEndDirector="*res://scripts/season_end_director.gd"
 
 [display]
 window/size/viewport_width=640
