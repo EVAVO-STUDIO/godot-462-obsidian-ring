@@ -1,11 +1,15 @@
 extends Node2D
 
 const ContentCatalog = preload("res://scripts/content_catalog.gd")
+const MatchRules = preload("res://scripts/match_rules.gd")
 const PLAYER_SPEED := 185.0
 const AI_SPEED := 138.0
 const COURT := Rect2(70.0, 62.0, 500.0, 250.0)
 const BALL_RADIUS := 7.0
 
+enum GamePhase { TITLE, PLAYING, RESULT }
+
+var phase := GamePhase.TITLE
 var player_position := Vector2(240.0, 190.0)
 var opponent_position := Vector2(430.0, 190.0)
 var ball_position := Vector2(320.0, 180.0)
@@ -27,6 +31,9 @@ var score_banner_timer := 2.0
 var home_team_name := "JAGUAR SUN"
 var away_team_name := "OBSIDIAN REED"
 var court_name := "STONE COURT"
+var result_text := ""
+var funds := 0
+var match_number := 1
 var teams: Array = []
 var rulesets: Array = []
 var courts: Array = []
@@ -35,37 +42,48 @@ var league: Dictionary = {}
 func _ready() -> void:
 	_configure_input()
 	_load_content()
-	_reset_match()
+	_prepare_match()
 	queue_redraw()
 
 func _process(delta: float) -> void:
-	if match_time > 0.0:
-		match_time = maxf(0.0, match_time - delta)
-		tackle_timer = maxf(0.0, tackle_timer - delta)
-		opponent_tackle_timer = maxf(0.0, opponent_tackle_timer - delta)
-		score_banner_timer = maxf(0.0, score_banner_timer - delta)
-		_update_player(delta)
-		_update_opponent(delta)
-		_update_ball(delta)
-		_resolve_possession()
-		_resolve_tackles()
-	else:
-		possession_owner = 0
-		ball_velocity = Vector2.ZERO
+	if phase == GamePhase.TITLE:
+		if Input.is_action_just_pressed("confirm"):
+			_start_match()
+	elif phase == GamePhase.PLAYING:
+		_update_match(delta)
+		if Input.is_action_just_pressed("cancel"):
+			phase = GamePhase.TITLE
+	elif phase == GamePhase.RESULT:
+		if Input.is_action_just_pressed("confirm"):
+			match_number += 1
+			_rotate_opponent()
+			_prepare_match()
+			phase = GamePhase.TITLE
+		elif Input.is_action_just_pressed("restart"):
+			_start_match()
 	queue_redraw()
+
+func _update_match(delta: float) -> void:
+	match_time = maxf(0.0, match_time - delta)
+	if match_time <= 0.0:
+		_finish_match()
+		return
+	tackle_timer = maxf(0.0, tackle_timer - delta)
+	opponent_tackle_timer = maxf(0.0, opponent_tackle_timer - delta)
+	score_banner_timer = maxf(0.0, score_banner_timer - delta)
+	_update_player(delta)
+	_update_opponent(delta)
+	_update_ball(delta)
+	_resolve_possession()
+	_resolve_tackles()
 
 func _load_content() -> void:
 	var teams_data = ContentCatalog.load_json("res://data/teams.json")
 	var rules_data = ContentCatalog.load_json("res://data/rules.json")
 	var courts_data = ContentCatalog.load_json("res://data/courts.json")
 	var league_data = ContentCatalog.load_json("res://data/league.json")
-
 	if typeof(teams_data) == TYPE_DICTIONARY:
 		teams = teams_data.get("teams", [])
-		if teams.size() > 0:
-			home_team_name = str(teams[0].get("name", home_team_name)).to_upper()
-		if teams.size() > 1:
-			away_team_name = str(teams[1].get("name", away_team_name)).to_upper()
 	if typeof(rules_data) == TYPE_DICTIONARY:
 		rulesets = rules_data.get("rulesets", [])
 		if not rulesets.is_empty():
@@ -81,8 +99,25 @@ func _load_content() -> void:
 			wall_rebound = float(active_court.get("rebound", wall_rebound))
 	if typeof(league_data) == TYPE_DICTIONARY:
 		league = league_data
+		funds = int(league.get("league", {}).get("starting_funds", 0))
+	_apply_team_names()
 
-func _reset_match() -> void:
+func _apply_team_names() -> void:
+	if teams.size() > 0:
+		home_team_name = str(teams[0].get("name", home_team_name)).to_upper()
+	if teams.size() > 1:
+		var away_index := clampi(1 + ((match_number - 1) % maxi(1, teams.size() - 1)), 1, teams.size() - 1)
+		away_team_name = str(teams[away_index].get("name", away_team_name)).to_upper()
+
+func _rotate_opponent() -> void:
+	_apply_team_names()
+	if not courts.is_empty():
+		var court_index := (match_number - 1) % courts.size()
+		var active_court: Dictionary = courts[court_index]
+		court_name = str(active_court.get("name", court_name)).to_upper()
+		wall_rebound = float(active_court.get("rebound", wall_rebound))
+
+func _prepare_match() -> void:
 	home_score = 0
 	away_score = 0
 	match_time = match_length
@@ -92,18 +127,35 @@ func _reset_match() -> void:
 	score_banner_timer = 2.0
 	_reset_ball()
 
+func _start_match() -> void:
+	_prepare_match()
+	phase = GamePhase.PLAYING
+
+func _finish_match() -> void:
+	phase = GamePhase.RESULT
+	possession_owner = 0
+	ball_velocity = Vector2.ZERO
+	result_text = MatchRules.winner_text(home_team_name, away_team_name, home_score, away_score)
+	var career: Dictionary = league.get("career", {})
+	var win_prize := int(career.get("win_purse", 600))
+	var draw_prize := int(career.get("draw_purse", 250))
+	var prize := MatchRules.prize_for_result(home_score, away_score, win_prize, draw_prize, 0)
+	funds += prize
+	if prize > 0:
+		result_text += "  +%d" % prize
+
 func _update_player(delta: float) -> void:
 	var movement := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var moving := movement.length_squared() > 0.01
 	player_position += movement * PLAYER_SPEED * delta
 	player_position = _clamp_to_court(player_position)
-	stamina = clampf(stamina + (16.0 if not moving else -3.0) * delta, 0.0, 100.0)
+	stamina = MatchRules.recover_stamina(stamina, moving, delta)
 	if possession_owner == 1:
 		ball_position = player_position + Vector2(16.0, 3.0)
 		if Input.is_action_just_pressed("pass_ball"):
 			_release_ball(player_position.direction_to(get_global_mouse_position()), 270.0)
 		elif Input.is_action_just_pressed("strike_ball") and stamina >= 10.0:
-			stamina -= 10.0
+			stamina = MatchRules.clamp_stamina(stamina - 10.0)
 			_release_ball(player_position.direction_to(get_global_mouse_position()), 420.0)
 
 func _update_opponent(delta: float) -> void:
@@ -116,7 +168,7 @@ func _update_opponent(delta: float) -> void:
 	var speed := AI_SPEED + (18.0 if possession_owner == 1 else 0.0)
 	opponent_position += direction * speed * delta
 	opponent_position = _clamp_to_court(opponent_position)
-	opponent_stamina = clampf(opponent_stamina + (12.0 if direction.length_squared() < 0.01 else -2.0) * delta, 0.0, 100.0)
+	opponent_stamina = MatchRules.clamp_stamina(opponent_stamina + (12.0 if direction.length_squared() < 0.01 else -2.0) * delta)
 	if possession_owner == 2:
 		ball_position = opponent_position + Vector2(-16.0, 3.0)
 		if opponent_position.x < COURT.get_center().x + 30.0:
@@ -141,8 +193,8 @@ func _resolve_possession() -> void:
 		possession_owner = 2
 
 func _resolve_tackles() -> void:
-	if Input.is_action_just_pressed("tackle") and tackle_timer <= 0.0 and stamina >= 14.0:
-		stamina -= 14.0
+	if Input.is_action_just_pressed("tackle") and MatchRules.can_tackle(stamina, tackle_timer):
+		stamina = MatchRules.clamp_stamina(stamina - 14.0)
 		tackle_timer = 0.55
 		if player_position.distance_to(opponent_position) < 31.0:
 			opponent_position += player_position.direction_to(opponent_position) * 24.0
@@ -154,7 +206,7 @@ func _resolve_tackles() -> void:
 	if possession_owner == 1 and opponent_tackle_timer <= 0.0 and opponent_position.distance_to(player_position) < 29.0:
 		opponent_tackle_timer = 0.8
 		if opponent_stamina >= 10.0:
-			opponent_stamina -= 10.0
+			opponent_stamina = MatchRules.clamp_stamina(opponent_stamina - 10.0)
 			possession_owner = 0
 			ball_position = player_position.lerp(opponent_position, 0.45)
 			ball_velocity = opponent_position.direction_to(player_position) * 105.0
@@ -225,28 +277,46 @@ func _clamp_to_court(point: Vector2) -> Vector2:
 	return Vector2(clampf(point.x, COURT.position.x + 12.0, COURT.end.x - 12.0), clampf(point.y, COURT.position.y + 12.0, COURT.end.y - 12.0))
 
 func _configure_input() -> void:
-	_add_key_action("move_left", KEY_A)
-	_add_key_action("move_left", KEY_LEFT)
-	_add_key_action("move_right", KEY_D)
-	_add_key_action("move_right", KEY_RIGHT)
-	_add_key_action("move_up", KEY_W)
-	_add_key_action("move_up", KEY_UP)
-	_add_key_action("move_down", KEY_S)
-	_add_key_action("move_down", KEY_DOWN)
+	_add_key_action("move_left", KEY_A); _add_key_action("move_left", KEY_LEFT)
+	_add_key_action("move_right", KEY_D); _add_key_action("move_right", KEY_RIGHT)
+	_add_key_action("move_up", KEY_W); _add_key_action("move_up", KEY_UP)
+	_add_key_action("move_down", KEY_S); _add_key_action("move_down", KEY_DOWN)
 	_add_key_action("pass_ball", KEY_SPACE)
 	_add_key_action("strike_ball", KEY_X)
 	_add_key_action("tackle", KEY_Z)
+	_add_key_action("confirm", KEY_ENTER)
+	_add_key_action("cancel", KEY_ESCAPE)
+	_add_key_action("restart", KEY_R)
 
 func _add_key_action(action: StringName, keycode: Key) -> void:
-	if not InputMap.has_action(action):
-		InputMap.add_action(action)
-	var event := InputEventKey.new()
-	event.physical_keycode = keycode
-	if not InputMap.action_has_event(action, event):
-		InputMap.action_add_event(action, event)
+	if not InputMap.has_action(action): InputMap.add_action(action)
+	var event := InputEventKey.new(); event.physical_keycode = keycode
+	if not InputMap.action_has_event(action, event): InputMap.action_add_event(action, event)
 
 func _draw() -> void:
 	draw_rect(Rect2(0, 0, 640, 360), Color("120f0b"))
+	if phase == GamePhase.TITLE:
+		_draw_title()
+		return
+	if phase == GamePhase.RESULT:
+		_draw_result()
+		return
+	_draw_match()
+
+func _draw_title() -> void:
+	draw_string(ThemeDB.fallback_font, Vector2(0, 82), "OBSIDIAN RING", HORIZONTAL_ALIGNMENT_CENTER, 640, 30, Color("eadcae"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 132), "MATCH %02d   %s" % [match_number, court_name], HORIZONTAL_ALIGNMENT_CENTER, 640, 15, Color("bca777"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 170), "%s  VS  %s" % [home_team_name, away_team_name], HORIZONTAL_ALIGNMENT_CENTER, 640, 17, Color("f2d47d"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 230), "ENTER  BEGIN MATCH", HORIZONTAL_ALIGNMENT_CENTER, 640, 15, Color("eadcae"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 272), "FUNDS %05d   RING %d   WALL %d" % [funds, ring_points, wall_points], HORIZONTAL_ALIGNMENT_CENTER, 640, 12, Color("9f8c64"))
+
+func _draw_result() -> void:
+	draw_string(ThemeDB.fallback_font, Vector2(0, 110), result_text, HORIZONTAL_ALIGNMENT_CENTER, 640, 23, Color("f2d47d"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 155), "%s %02d  -  %02d %s" % [home_team_name, home_score, away_score, away_team_name], HORIZONTAL_ALIGNMENT_CENTER, 640, 16, Color("eadcae"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 200), "FUNDS %05d" % funds, HORIZONTAL_ALIGNMENT_CENTER, 640, 13, Color("bca777"))
+	draw_string(ThemeDB.fallback_font, Vector2(0, 250), "ENTER  NEXT MATCH    R  REMATCH", HORIZONTAL_ALIGNMENT_CENTER, 640, 13, Color("9f8c64"))
+
+func _draw_match() -> void:
 	draw_rect(COURT, Color("463522"))
 	draw_rect(COURT, Color("b99b65"), false, 3.0)
 	draw_line(Vector2(COURT.get_center().x, COURT.position.y), Vector2(COURT.get_center().x, COURT.end.y), Color("7d6743"), 2.0)
