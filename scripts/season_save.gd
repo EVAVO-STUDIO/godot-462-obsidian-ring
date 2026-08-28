@@ -3,8 +3,9 @@ extends Node
 const SAVE_PATH := "user://obsidian_ring_season.json"
 const SAVE_VERSION := 2
 const SAVE_INTERVAL := 1.0
+const MAX_FUNDS := 99999999
 
-var _restored := false
+var _restored_scene_id := 0
 var _timer := 0.0
 var _last_signature := ""
 
@@ -12,10 +13,12 @@ func _process(delta: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null or not _supports_season_state(scene):
 		return
-	if not _restored:
+	var scene_id := scene.get_instance_id()
+	if _restored_scene_id != scene_id:
 		_restore(scene)
-		_restored = true
+		_restored_scene_id = scene_id
 		_last_signature = _signature(scene)
+		_timer = 0.0
 		return
 	_timer += delta
 	if _timer < SAVE_INTERVAL:
@@ -42,10 +45,96 @@ func _supports_season_state(scene: Object) -> bool:
 			return false
 	return true
 
+func _season_rounds(scene: Object) -> int:
+	var league_data = scene.get("league")
+	if typeof(league_data) == TYPE_DICTIONARY:
+		return maxi(1, int(league_data.get("league", {}).get("season_rounds", 10)))
+	return 10
+
+func _valid_team_ids(scene: Object) -> Dictionary:
+	var result: Dictionary = {}
+	var teams = scene.get("teams")
+	if typeof(teams) == TYPE_ARRAY:
+		for team in teams:
+			if typeof(team) == TYPE_DICTIONARY:
+				var id := str(team.get("id", ""))
+				if id != "":
+					result[id] = true
+	return result
+
+func _valid_player_ids(scene: Object) -> Dictionary:
+	var result: Dictionary = {}
+	var rosters = scene.get("roster_state")
+	if typeof(rosters) != TYPE_ARRAY:
+		return result
+	for roster in rosters:
+		if typeof(roster) != TYPE_DICTIONARY:
+			continue
+		for player in roster.get("players", []):
+			if typeof(player) == TYPE_DICTIONARY:
+				var id := str(player.get("id", ""))
+				if id != "":
+					result[id] = true
+	return result
+
+func _sanitize_table(scene: Object, saved) -> Array:
+	if typeof(saved) != TYPE_ARRAY:
+		return scene.get("league_table")
+	var valid_ids := _valid_team_ids(scene)
+	var result: Array = []
+	var seen: Dictionary = {}
+	for row in saved:
+		if typeof(row) != TYPE_DICTIONARY:
+			continue
+		var id := str(row.get("id", ""))
+		if not valid_ids.has(id) or seen.has(id):
+			continue
+		seen[id] = true
+		var next := row.duplicate(true)
+		for key in ["played", "wins", "draws", "losses", "for", "against", "points"]:
+			next[key] = maxi(0, int(next.get(key, 0)))
+		result.append(next)
+	return result if result.size() == valid_ids.size() else scene.get("league_table")
+
+func _sanitize_rosters(scene: Object, saved) -> Array:
+	if typeof(saved) != TYPE_ARRAY:
+		return scene.get("roster_state")
+	var valid_team_ids := _valid_team_ids(scene)
+	var current_players := _valid_player_ids(scene)
+	var result: Array = []
+	var seen_teams: Dictionary = {}
+	var seen_players: Dictionary = {}
+	for roster in saved:
+		if typeof(roster) != TYPE_DICTIONARY:
+			continue
+		var team_id := str(roster.get("team_id", ""))
+		if not valid_team_ids.has(team_id) or seen_teams.has(team_id):
+			continue
+		var next_players: Array = []
+		for player in roster.get("players", []):
+			if typeof(player) != TYPE_DICTIONARY:
+				continue
+			var id := str(player.get("id", ""))
+			if not current_players.has(id) or seen_players.has(id):
+				continue
+			seen_players[id] = true
+			var next := player.duplicate(true)
+			next["skill"] = clampi(int(next.get("skill", 1)), 1, 10)
+			next["injury_matches"] = maxi(0, int(next.get("injury_matches", 0)))
+			next["suspension_matches"] = maxi(0, int(next.get("suspension_matches", 0)))
+			next["booking_points"] = maxi(0, int(next.get("booking_points", 0)))
+			next["suspensions_served"] = maxi(0, int(next.get("suspensions_served", 0)))
+			next_players.append(next)
+		if next_players.size() < 3:
+			continue
+		seen_teams[team_id] = true
+		result.append({"team_id": team_id, "players": next_players})
+	return result if result.size() == valid_team_ids.size() else scene.get("roster_state")
+
 func _snapshot(scene: Object) -> Dictionary:
 	return {
 		"version": SAVE_VERSION,
-		"funds": maxi(0, int(scene.get("funds"))),
+		"funds": clampi(int(scene.get("funds")), 0, MAX_FUNDS),
 		"match_number": maxi(1, int(scene.get("match_number"))),
 		"league_table": scene.get("league_table"),
 		"roster_state": scene.get("roster_state")
@@ -71,14 +160,11 @@ func _restore(scene: Object) -> void:
 	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("version", -1)) != SAVE_VERSION:
 		push_warning("Obsidian Ring save ignored because it is invalid or from an unsupported version.")
 		return
-	scene.set("funds", maxi(0, int(parsed.get("funds", scene.get("funds")))))
-	scene.set("match_number", maxi(1, int(parsed.get("match_number", scene.get("match_number")))))
-	var table = parsed.get("league_table", [])
-	if typeof(table) == TYPE_ARRAY and not table.is_empty():
-		scene.set("league_table", table)
-	var saved_rosters = parsed.get("roster_state", [])
-	if typeof(saved_rosters) == TYPE_ARRAY and not saved_rosters.is_empty():
-		scene.set("roster_state", saved_rosters)
+	scene.set("funds", clampi(int(parsed.get("funds", scene.get("funds"))), 0, MAX_FUNDS))
+	var max_reasonable_round := _season_rounds(scene) + 3
+	scene.set("match_number", clampi(int(parsed.get("match_number", scene.get("match_number"))), 1, max_reasonable_round))
+	scene.set("league_table", _sanitize_table(scene, parsed.get("league_table", [])))
+	scene.set("roster_state", _sanitize_rosters(scene, parsed.get("roster_state", [])))
 	if scene.has_method("_apply_match_identity"):
 		scene.call("_apply_match_identity")
 	if scene.has_method("_prepare_match"):
