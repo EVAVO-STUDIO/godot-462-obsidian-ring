@@ -2,12 +2,14 @@ extends SceneTree
 
 const RosterSaveRules = preload("res://scripts/roster_save_rules.gd")
 const ConditionRules = preload("res://scripts/condition_rules.gd")
+const SaveRecoveryRules = preload("res://scripts/save_recovery_rules.gd")
 
 var failures: Array[String] = []
 
 func _initialize() -> void:
 	_test_canonical_roster_merge()
 	_test_participant_accumulation()
+	_test_save_recovery()
 	if failures.is_empty():
 		print("Obsidian Ring persistence self-test passed.")
 		quit(0)
@@ -49,6 +51,16 @@ func _test_participant_accumulation() -> void:
 	_expect(absf(float(captured["starter"]) - 31.0) < 0.001, "substituted-out participant should retain last observed stamina")
 	_expect(absf(float(captured["other"]) - 64.0) < 0.001, "active participant stamina should update to latest observation")
 	_expect(ConditionRules.carry_from_end_stamina(float(captured["starter"])) > 0, "tired substituted-out participant should receive fatigue carry rather than bench recovery")
+
+func _test_save_recovery() -> void:
+	var primary := JSON.stringify({"version":3,"funds":4200})
+	var backup := JSON.stringify({"version":3,"funds":3100})
+	var chosen := SaveRecoveryRules.choose_primary_or_backup(primary, backup, 2, 3)
+	_expect(str(chosen.get("source", "")) == "primary" and int(chosen.get("data", {}).get("funds", 0)) == 4200, "valid primary season save should take precedence")
+	chosen = SaveRecoveryRules.choose_primary_or_backup("{truncated", backup, 2, 3)
+	_expect(str(chosen.get("source", "")) == "backup" and int(chosen.get("data", {}).get("funds", 0)) == 3100, "corrupt primary season save should recover from valid backup")
+	chosen = SaveRecoveryRules.choose_primary_or_backup(JSON.stringify({"version":1}), JSON.stringify({"version":4}), 2, 3)
+	_expect(str(chosen.get("source", "")) == "none" and chosen.get("data", {}).is_empty(), "unsupported season save versions must not restore")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
