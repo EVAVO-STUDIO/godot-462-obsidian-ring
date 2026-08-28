@@ -24,7 +24,7 @@ $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
     'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
-    'scripts/match_substitution_director.gd','scripts/fatigue_director.gd','tools/runtime_self_test.gd',
+    'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd','tools/runtime_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -76,9 +76,10 @@ foreach ($Roster in $Rosters.rosters) {
         if (-not $Player.id -or -not $Player.name) { throw "Player missing id/name: $($Roster.team_id)" }
         if ($RoleIds -notcontains $Player.role) { throw "Unknown player role: $($Player.id) -> $($Player.role)" }
         if ([int]$Player.skill -lt 1 -or [int]$Player.skill -gt 10) { throw "Player skill out of range: $($Player.id)" }
-        foreach ($Field in @('injury_matches','suspension_matches','booking_points')) {
+        foreach ($Field in @('injury_matches','suspension_matches','booking_points','fatigue_carry')) {
             if ($null -ne $Player.$Field -and [int]$Player.$Field -lt 0) { throw "Negative player state: $($Player.id).$Field" }
         }
+        if ($null -ne $Player.fatigue_carry -and [int]$Player.fatigue_carry -gt 40) { throw "fatigue_carry out of range: $($Player.id)" }
         $PlayerIds += $Player.id
     }
 }
@@ -120,6 +121,7 @@ foreach ($Autoload in @(
     'SeasonSave="*res://scripts/season_save.gd"',
     'SeasonDirector="*res://scripts/season_director.gd"',
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"',
+    'ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"'
 )) {
     if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
@@ -136,12 +138,20 @@ $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
 foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) {
     if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" }
 }
+$ConditionRulesText = Get-Content -Raw (Join-Path $Root 'scripts/condition_rules.gd')
+foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina')) {
+    if (-not $ConditionRulesText.Contains($Token)) { throw "Condition rules missing token: $Token" }
+}
+$ConditionDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/condition_director.gd')
+foreach ($Token in @('_capture_end_condition','_apply_starting_condition','fatigue_carry','ConditionRules.starting_stamina')) {
+    if (-not $ConditionDirectorText.Contains($Token)) { throw "Condition director missing token: $Token" }
+}
 $FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
 foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) {
     if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" }
 }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round')) {
+foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) {
     if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" }
 }
 
