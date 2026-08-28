@@ -29,6 +29,7 @@ $Required = @(
     'data/courts.json',
     'data/league.json',
     'docs/GAME_DESIGN.md',
+    'docs/ARCHITECTURE.md',
     'docs/QA.md'
 )
 
