@@ -6,6 +6,9 @@ config_version=5
 config/name="Obsidian Ring"
 run/main_scene="res://scenes/main.tscn"
 
+[autoload]
+SeasonSave="*res://scripts/season_save.gd"
+
 [display]
 window/size/viewport_width=640
 window/size/viewport_height=360
