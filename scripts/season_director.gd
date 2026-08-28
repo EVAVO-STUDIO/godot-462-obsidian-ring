@@ -16,6 +16,9 @@ var _semifinal_winners: Array = []
 var _champion_id := ""
 var _championship_purse_paid := false
 
+func _ready() -> void:
+	process_priority = 80
+
 func _process(_delta: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null or not _supports(scene):
@@ -64,15 +67,29 @@ func _apply_new_bookings(scene: Object) -> void:
 	var home_fouls := int(scene.get("home_fouls"))
 	var away_fouls := int(scene.get("away_fouls"))
 	if home_fouls > _last_home_fouls:
-		var players: Array = scene.get("home_players")
-		var controlled := clampi(int(scene.get("controlled_home_index")), 0, maxi(0, players.size() - 1))
-		if not players.is_empty():
-			_apply_booking_to_roster(scene, str(players[controlled].get("id", "")), 1)
+		var actor_id := _ledger_actor_id("last_home_actor_id")
+		if actor_id == "":
+			var players: Array = scene.get("home_players")
+			var controlled := clampi(int(scene.get("controlled_home_index")), 0, maxi(0, players.size() - 1))
+			if not players.is_empty():
+				actor_id = str(players[controlled].get("id", ""))
+		if actor_id != "":
+			_apply_booking_to_roster(scene, actor_id, 1)
 	if away_fouls > _last_away_fouls:
-		var players: Array = scene.get("away_players")
-		if not players.is_empty():
-			var index := _nearest_away_tackler_index(scene, players)
-			_apply_booking_to_roster(scene, str(players[index].get("id", "")), 1)
+		var actor_id := _ledger_actor_id("last_away_actor_id")
+		if actor_id == "":
+			var players: Array = scene.get("away_players")
+			if not players.is_empty():
+				var index := _nearest_away_tackler_index(scene, players)
+				actor_id = str(players[index].get("id", ""))
+		if actor_id != "":
+			_apply_booking_to_roster(scene, actor_id, 1)
+
+func _ledger_actor_id(property_name: String) -> String:
+	var ledger := get_node_or_null("/root/FoulLedgerDirector")
+	if ledger == null:
+		return ""
+	return str(ledger.get(property_name))
 
 func _nearest_away_tackler_index(scene: Object, players: Array) -> int:
 	if players.is_empty():
