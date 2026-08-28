@@ -1,12 +1,14 @@
 extends SceneTree
 
 const DisciplineRules = preload("res://scripts/discipline_rules.gd")
+const FoulLedgerRules = preload("res://scripts/foul_ledger_rules.gd")
 
 var failures: Array[String] = []
 
 func _initialize() -> void:
 	_test_default_policy()
 	_test_custom_policy()
+	_test_foul_attribution()
 	if failures.is_empty():
 		print("Obsidian Ring discipline policy self-test passed.")
 		quit(0)
@@ -32,6 +34,22 @@ func _test_custom_policy() -> void:
 	var served := DisciplineRules.serve_round(booked)
 	_expect(int(served.get("suspension_matches", 0)) == 1, "serving one round should decrement multi-match suspension by one")
 	DisciplineRules.configure(3, 1)
+
+func _test_foul_attribution() -> void:
+	var home_players := [
+		{"id":"h0","name":"HOME ZERO","position":Vector2(100,100)},
+		{"id":"h1","name":"HOME ONE","position":Vector2(200,100)}
+	]
+	var away_players := [
+		{"id":"a0","name":"AWAY ZERO","position":Vector2(210,100)},
+		{"id":"a1","name":"AWAY ONE","position":Vector2(420,100)}
+	]
+	var home_actor := FoulLedgerRules.controlled_actor(home_players, 1)
+	_expect(str(home_actor.get("id", "")) == "h1", "home foul should resolve to controlled tackler")
+	var away_actor := FoulLedgerRules.ai_tackler_actor(away_players, home_players, 1, 1, 0)
+	_expect(str(away_actor.get("id", "")) == "a0", "away foul should resolve to exact nearest AI tackler used by live tackle branch")
+	var event := FoulLedgerRules.make_event("away", away_actor, 5, 3)
+	_expect(str(event.get("actor_id", "")) == "a0" and int(event.get("round", 0)) == 5 and int(event.get("serial", 0)) == 3, "foul event should preserve actor round and serial")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
