@@ -16,7 +16,7 @@ function Resolve-Godot {
 Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
-    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/season_save.gd',
+    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/season_save.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json',
     'data/rosters.json','data/fixtures.json','docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -29,10 +29,9 @@ foreach ($JsonPath in @('data/teams.json','data/rules.json','data/courts.json','
     $Data = Get-Content -Raw (Join-Path $Root $JsonPath) | ConvertFrom-Json
     $Parsed[$JsonPath] = $Data
     Write-Host "JSON OK: $JsonPath" -ForegroundColor DarkGreen
-    foreach ($CollectionName in @('teams','rulesets','courts','roles','rosters','rounds')) {
+    foreach ($CollectionName in @('teams','rulesets','courts','roles')) {
         $Collection = $Data.$CollectionName
         if ($null -eq $Collection) { continue }
-        if ($CollectionName -in @('rosters','rounds')) { continue }
         $Ids = @($Collection | ForEach-Object { $_.id })
         if ($Ids -contains $null -or $Ids -contains '') { throw "Blank id in $JsonPath/$CollectionName" }
         if (@($Ids | Sort-Object -Unique).Count -ne $Ids.Count) { throw "Duplicate id in $JsonPath/$CollectionName" }
@@ -70,6 +69,7 @@ foreach ($Roster in $Parsed['data/rosters.json'].rosters) {
         if (-not $Player.id -or -not $Player.name) { throw "Roster player missing id/name: $($Roster.team_id)" }
         if ($RoleIds -notcontains $Player.role) { throw "Player references unknown role: $($Player.id) -> $($Player.role)" }
         if ([int]$Player.skill -lt 1 -or [int]$Player.skill -gt 10) { throw "Player skill out of range: $($Player.id)" }
+        if ($null -ne $Player.injury_matches -and [int]$Player.injury_matches -lt 0) { throw "Player injury_matches cannot be negative: $($Player.id)" }
         $AllPlayerIds += $Player.id
     }
 }
@@ -88,12 +88,15 @@ foreach ($Round in $Parsed['data/fixtures.json'].rounds) {
         if ($SeenTeams -contains $Fixture.home -or $SeenTeams -contains $Fixture.away) { throw "Team appears twice in round $RoundNo" }
         $SeenTeams += @($Fixture.home,$Fixture.away)
     }
+    if (@($SeenTeams | Sort-Object -Unique).Count -ne $TeamIds.Count) { throw "Every team must appear exactly once in fixture round $RoundNo" }
 }
 
 $League = $Parsed['data/league.json'].league
+$Career = $Parsed['data/league.json'].career
 if ([int]$League.win_points -le [int]$League.draw_points) { throw 'League win_points must exceed draw_points.' }
 if ([int]$League.playoff_teams -gt $Teams.Count) { throw 'playoff_teams cannot exceed team count.' }
 if (@($Parsed['data/fixtures.json'].rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture round count must equal league season_rounds.' }
+if ([int]$Career.training_cost_base -le 0 -or [int]$Career.medical_cost_base -le 0) { throw 'Career training and medical costs must be positive.' }
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 if ($ProjectText -notmatch 'SeasonSave="\*res://scripts/season_save.gd"') { throw 'SeasonSave autoload is not configured.' }
