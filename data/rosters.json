@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "rosters": [
+    {"team_id":"jaguar_house","players":[
+      {"id":"jh_itzal","name":"Itzal","role":"guard","skill":7,"toughness_bonus":1,"discipline_bonus":1},
+      {"id":"jh_balam","name":"Balam","role":"striker","skill":7,"toughness_bonus":0,"discipline_bonus":0},
+      {"id":"jh_tecu","name":"Tecu","role":"runner","skill":6,"toughness_bonus":0,"discipline_bonus":1},
+      {"id":"jh_xaman","name":"Xaman","role":"guard","skill":6,"toughness_bonus":1,"discipline_bonus":0},
+      {"id":"jh_achi","name":"Achi","role":"runner","skill":6,"toughness_bonus":0,"discipline_bonus":1}
+    ]},
+    {"team_id":"quetzal_runners","players":[
+      {"id":"qr_yaret","name":"Yaret","role":"runner","skill":8,"toughness_bonus":0,"discipline_bonus":0},
+      {"id":"qr_amatl","name":"Amatl","role":"striker","skill":8,"toughness_bonus":0,"discipline_bonus":0},
+      {"id":"qr_tonal","name":"Tonal","role":"runner","skill":7,"toughness_bonus":0,"discipline_bonus":0},
+      {"id":"qr_pakal","name":"Pakal","role":"guard","skill":5,"toughness_bonus":1,"discipline_bonus":1},
+      {"id":"qr_ek","name":"Ek","role":"striker","skill":7,"toughness_bonus":0,"discipline_bonus":0}
+    ]},
+    {"team_id":"obsidian_guard","players":[
+      {"id":"og_coatl","name":"Coatl","role":"guard","skill":8,"toughness_bonus":2,"discipline_bonus":1},
+      {"id":"og_mecatl","name":"Mecatl","role":"guard","skill":7,"toughness_bonus":2,"discipline_bonus":1},
+      {"id":"og_yaotl","name":"Yaotl","role":"striker","skill":6,"toughness_bonus":1,"discipline_bonus":0},
+      {"id":"og_ollin","name":"Ollin","role":"runner","skill":5,"toughness_bonus":1,"discipline_bonus":1},
+      {"id":"og_tletl","name":"Tletl","role":"striker","skill":6,"toughness_bonus":1,"discipline_bonus":1}
+    ]},
+    {"team_id":"sun_serpents","players":[
+      {"id":"ss_xochi","name":"Xochi","role":"striker","skill":9,"toughness_bonus":0,"discipline_bonus":-1},
+      {"id":"ss_mazatl","name":"Mazatl","role":"runner","skill":8,"toughness_bonus":0,"discipline_bonus":-1},
+      {"id":"ss_tlaca","name":"Tlaca","role":"striker","skill":8,"toughness_bonus":0,"discipline_bonus":-1},
+      {"id":"ss_citli","name":"Citli","role":"guard","skill":5,"toughness_bonus":1,"discipline_bonus":0},
+      {"id":"ss_eheca","name":"Eheca","role":"runner","skill":7,"toughness_bonus":0,"discipline_bonus":-1}
+    ]}
+  ]
+}
