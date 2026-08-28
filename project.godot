@@ -10,6 +10,7 @@ run/main_scene="res://scenes/main.tscn"
 SeasonSave="*res://scripts/season_save.gd"
 SeasonDirector="*res://scripts/season_director.gd"
 MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"
+FatigueDirector="*res://scripts/fatigue_director.gd"
 
 [display]
 window/size/viewport_width=640
