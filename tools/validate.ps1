@@ -16,7 +16,7 @@ function Resolve-Godot {
 Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
-    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd',
+    'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_director.gd','scripts/season_save.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json',
     'data/rosters.json','data/fixtures.json','docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -128,10 +128,18 @@ foreach ($Pair in $PairCounts.GetEnumerator()) {
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 if ($ProjectText -notmatch 'SeasonSave="\*res://scripts/season_save.gd"') { throw 'SeasonSave autoload is not configured.' }
+if ($ProjectText -notmatch 'SeasonDirector="\*res://scripts/season_director.gd"') { throw 'SeasonDirector autoload is not configured.' }
+
+$SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
+foreach ($Token in @('DisciplineRules.apply_booking','DisciplineRules.serve_round','PlayoffRules.semifinal_pairings','PlayoffRules.final_pairing','user://obsidian_ring_postseason.json')) {
+    if ($SeasonDirectorText -notmatch [regex]::Escape($Token)) { throw "SeasonDirector missing live integration token: $Token" }
+}
+$RosterRulesText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
+if ($RosterRulesText -notmatch 'suspension_matches') { throw 'RosterRules is not suspension-aware.' }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
-    Write-Warning 'Godot executable not found. Structural, save, roster, discipline, playoff, fixture, role and league validation passed; engine smoke test skipped.'
+    Write-Warning 'Godot executable not found. Structural, save, live discipline, postseason, roster, fixture, role and league validation passed; engine smoke test skipped.'
     exit 0
 }
 & $Godot --headless --path $Root --editor --quit
