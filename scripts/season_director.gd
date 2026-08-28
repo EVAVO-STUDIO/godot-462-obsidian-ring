@@ -71,8 +71,30 @@ func _apply_new_bookings(scene: Object) -> void:
 	if away_fouls > _last_away_fouls:
 		var players: Array = scene.get("away_players")
 		if not players.is_empty():
-			var index := clampi(int(scene.get("possession_index")), 0, players.size() - 1)
+			var index := _nearest_away_tackler_index(scene, players)
 			_apply_booking_to_roster(scene, str(players[index].get("id", "")), 1)
+
+func _nearest_away_tackler_index(scene: Object, players: Array) -> int:
+	if players.is_empty():
+		return 0
+	var target := Vector2.ZERO
+	var home_players: Array = scene.get("home_players")
+	var possession_team := int(scene.get("possession_team")) if _has_property(scene, "possession_team") else 0
+	var possession_index := int(scene.get("possession_index")) if _has_property(scene, "possession_index") else -1
+	if possession_team == 1 and possession_index >= 0 and possession_index < home_players.size():
+		target = home_players[possession_index].get("position", Vector2.ZERO)
+	elif not home_players.is_empty():
+		var controlled := clampi(int(scene.get("controlled_home_index")), 0, home_players.size() - 1)
+		target = home_players[controlled].get("position", Vector2.ZERO)
+	var best_index := 0
+	var best_distance := INF
+	for i in range(players.size()):
+		var position: Vector2 = players[i].get("position", Vector2.ZERO)
+		var distance := position.distance_squared_to(target)
+		if distance < best_distance:
+			best_distance = distance
+			best_index = i
+	return best_index
 
 func _apply_booking_to_roster(scene: Object, player_id: String, points: int) -> void:
 	if player_id == "":
@@ -126,8 +148,14 @@ func _service_old_suspensions(scene: Object) -> void:
 
 func _capture_postseason_result(scene: Object) -> void:
 	var phase := int(scene.get("phase"))
+	if _last_phase == phase or phase != 2:
+		return
+	var league_cfg := _league_config(scene)
+	var season_rounds := maxi(1, int(league_cfg.get("season_rounds", 10)))
+	var semifinal_round := season_rounds + 1
+	var final_round := season_rounds + 2
 	var round_no := int(scene.get("match_number"))
-	if _last_phase == phase or phase != 2 or round_no < 11:
+	if round_no < semifinal_round or round_no > final_round:
 		return
 	var home_id := str(scene.get("home_team_id"))
 	var away_id := str(scene.get("away_team_id"))
@@ -135,13 +163,13 @@ func _capture_postseason_result(scene: Object) -> void:
 	var home_row := _table_row(table, home_id)
 	var away_row := _table_row(table, away_id)
 	var winner := PlayoffRules.winner_id(home_row, away_row, int(scene.get("home_score")), int(scene.get("away_score")))
-	if round_no == 11:
+	if round_no == semifinal_round:
 		if winner not in _semifinal_winners:
 			_semifinal_winners.append(winner)
 		var other := _other_semifinal_winner(table, winner)
 		if other != "" and other not in _semifinal_winners:
 			_semifinal_winners.append(other)
-	elif round_no == 12:
+	elif round_no == final_round:
 		_champion_id = winner
 		_award_championship_purse(scene)
 	_save_state()
@@ -262,3 +290,9 @@ func _load_state() -> void:
 				_semifinal_winners.append(id)
 	_champion_id = str(parsed.get("champion_id", ""))
 	_championship_purse_paid = bool(parsed.get("championship_purse_paid", false))
+
+func _has_property(object: Object, property_name: String) -> bool:
+	for property in object.get_property_list():
+		if str(property.get("name", "")) == property_name:
+			return true
+	return false
