@@ -61,12 +61,10 @@ func _latest_foul() -> Dictionary:
 
 func _postseason_state() -> Dictionary:
 	var director := get_node_or_null("/root/SeasonDirector")
-	if director == null:
+	if director == null or not director.has_method("postseason_state"):
 		return {}
-	return {
-		"semifinal_winners": director.get("_semifinal_winners"),
-		"champion_id": director.get("_champion_id")
-	}
+	var state = director.call("postseason_state")
+	return state if typeof(state) == TYPE_DICTIONARY else {}
 
 func _supports(scene: Object) -> bool:
 	var names: Dictionary = {}
