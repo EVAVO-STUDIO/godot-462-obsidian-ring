@@ -89,6 +89,16 @@ func _test_roster() -> void:
 	for player in suspension_active:
 		_expect(str(player.get("id", "")) != "sg", "suspended player must not enter active lineup")
 
+	var bench := [
+		{"id":"fast_runner","role":"runner","skill":9,"injury_matches":0,"suspension_matches":0},
+		{"id":"steady_guard","role":"guard","skill":7,"injury_matches":0,"suspension_matches":0},
+		{"id":"hurt_guard","role":"guard","skill":10,"injury_matches":1,"suspension_matches":0}
+	]
+	var role_pick := RosterRules.best_substitute_candidate(bench, {}, {}, "guard")
+	_expect(str(role_pick.get("id", "")) == "steady_guard", "substitution should prefer an eligible same-role player over a higher-skill different role")
+	var fallback_pick := RosterRules.best_substitute_candidate(bench, {}, {"steady_guard":true}, "guard")
+	_expect(str(fallback_pick.get("id", "")) == "fast_runner", "substitution should fall back to the best eligible player when no same-role option remains")
+
 func _test_discipline() -> void:
 	var booked := DisciplineRules.apply_booking({"booking_points":2,"suspensions_served":0,"suspension_matches":0}, 1)
 	_expect(int(booked.get("suspension_matches", 0)) >= 1, "booking threshold should trigger suspension")
