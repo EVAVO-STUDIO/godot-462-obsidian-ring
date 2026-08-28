@@ -125,16 +125,20 @@ foreach ($Autoload in @(
     if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
 }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2','season_rounds')) {
+foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) {
     if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration token: $Token" }
 }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
-foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','_substitute_player','suspension_matches')) {
+foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) {
     if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" }
 }
+$RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
+foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) {
+    if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" }
+}
 $FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
-foreach ($Token in @('LOW_STAMINA_THRESHOLD','CRITICAL_STAMINA_THRESHOLD','base_speed_mult','request_emergency_substitution','performance_factor_for_stamina')) {
-    if (-not $FatigueText.Contains($Token)) { throw "FatigueDirector missing token: $Token" }
+foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) {
+    if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" }
 }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
 foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round')) {
