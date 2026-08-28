@@ -4,27 +4,30 @@ const DisciplineRules = preload("res://scripts/discipline_rules.gd")
 const LeagueRules = preload("res://scripts/league_rules.gd")
 const PlayoffRules = preload("res://scripts/playoff_rules.gd")
 const SAVE_PATH := "user://obsidian_ring_postseason.json"
+const SAVE_VERSION := 2
 const USER_TEAM_ID := "jaguar_house"
 
 var _last_home_fouls := 0
 var _last_away_fouls := 0
 var _last_match_number := 1
 var _last_phase := -1
-var _loaded := false
+var _loaded_scene_id := 0
 var _semifinal_winners: Array = []
 var _champion_id := ""
+var _championship_purse_paid := false
 
 func _process(_delta: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null or not _supports(scene):
 		return
-	if not _loaded:
+	var scene_id := scene.get_instance_id()
+	if _loaded_scene_id != scene_id:
 		_load_state()
 		_last_home_fouls = int(scene.get("home_fouls"))
 		_last_away_fouls = int(scene.get("away_fouls"))
 		_last_match_number = int(scene.get("match_number"))
 		_last_phase = int(scene.get("phase"))
-		_loaded = true
+		_loaded_scene_id = scene_id
 
 	_apply_new_bookings(scene)
 	_service_old_suspensions(scene)
@@ -40,7 +43,7 @@ func _supports(scene: Object) -> bool:
 	var names: Dictionary = {}
 	for property in scene.get_property_list():
 		names[str(property.get("name", ""))] = true
-	for required in ["home_fouls", "away_fouls", "match_number", "league_table", "roster_state", "home_players", "away_players", "phase"]:
+	for required in ["home_fouls", "away_fouls", "match_number", "league_table", "roster_state", "home_players", "away_players", "phase", "funds"]:
 		if not names.has(required):
 			return false
 	return true
@@ -50,6 +53,12 @@ func _league_config(scene: Object) -> Dictionary:
 	if typeof(league_data) != TYPE_DICTIONARY:
 		return {}
 	return league_data.get("league", {})
+
+func _playoff_config(scene: Object) -> Dictionary:
+	var league_data = scene.get("league")
+	if typeof(league_data) != TYPE_DICTIONARY:
+		return {}
+	return league_data.get("playoffs", {})
 
 func _apply_new_bookings(scene: Object) -> void:
 	var home_fouls := int(scene.get("home_fouls"))
@@ -84,9 +93,11 @@ func _apply_booking_to_roster(scene: Object, player_id: String, points: int) -> 
 			roster["players"] = players
 			rosters[ri] = roster
 			scene.set("roster_state", rosters)
-			if scene.has_method("set"):
-				scene.set("status_text", "%s BOOKED" % str(player.get("name", "PLAYER")).to_upper())
-				scene.set("status_timer", 1.6)
+			var status := "%s BOOKED" % str(player.get("name", "PLAYER")).to_upper()
+			if int(player.get("suspension_matches", 0)) > before_suspension:
+				status = "%s SUSPENDED" % str(player.get("name", "PLAYER")).to_upper()
+			scene.set("status_text", status)
+			scene.set("status_timer", 1.6)
 			return
 
 func _service_old_suspensions(scene: Object) -> void:
@@ -132,24 +143,40 @@ func _capture_postseason_result(scene: Object) -> void:
 			_semifinal_winners.append(other)
 	elif round_no == 12:
 		_champion_id = winner
+		_award_championship_purse(scene)
 	_save_state()
 
+func _award_championship_purse(scene: Object) -> void:
+	if _championship_purse_paid or _champion_id != USER_TEAM_ID:
+		return
+	var cfg := _playoff_config(scene)
+	var purse := maxi(0, int(cfg.get("championship_purse", 0)))
+	if purse > 0:
+		scene.set("funds", int(scene.get("funds")) + purse)
+		scene.set("status_text", "CHAMPIONS +%d" % purse)
+		scene.set("status_timer", 999.0)
+	_championship_purse_paid = true
+
 func _apply_postseason_identity(scene: Object) -> void:
-	var cfg := _league_config(scene)
-	if not bool(cfg.get("playoffs_enabled", true)):
+	var league_cfg := _league_config(scene)
+	var playoff_cfg := _playoff_config(scene)
+	if not bool(playoff_cfg.get("enabled", true)):
 		return
 	var round_no := int(scene.get("match_number"))
-	if round_no < 11:
+	var season_rounds := maxi(1, int(league_cfg.get("season_rounds", 10)))
+	if round_no <= season_rounds:
 		return
 	var table := LeagueRules.sorted_table(scene.get("league_table"))
-	if round_no == 11:
-		var pair := _user_semifinal(table, int(cfg.get("playoff_teams", 4)))
+	var semifinal_round := season_rounds + 1
+	var final_round := season_rounds + 2
+	if round_no == semifinal_round:
+		var pair := _user_semifinal(table, int(league_cfg.get("playoff_teams", 4)))
 		if pair.is_empty():
 			scene.set("status_text", "SEASON COMPLETE - NO PLAYOFF BERTH")
 			scene.set("status_timer", 999.0)
 			return
 		_apply_pair(scene, pair, "SEMIFINAL")
-	elif round_no == 12:
+	elif round_no == final_round:
 		if USER_TEAM_ID not in _semifinal_winners:
 			scene.set("status_text", "SEASON COMPLETE - SEMIFINAL EXIT")
 			scene.set("status_timer", 999.0)
@@ -205,18 +232,33 @@ func _save_state() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		return
-	file.store_string(JSON.stringify({"version":1,"semifinal_winners":_semifinal_winners,"champion_id":_champion_id}, "  "))
+	file.store_string(JSON.stringify({
+		"version": SAVE_VERSION,
+		"semifinal_winners": _semifinal_winners,
+		"champion_id": _champion_id,
+		"championship_purse_paid": _championship_purse_paid
+	}, "  "))
 
 func _load_state() -> void:
+	_semifinal_winners.clear()
+	_champion_id = ""
+	_championship_purse_paid = false
 	if not FileAccess.file_exists(SAVE_PATH):
 		return
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file == null:
 		return
 	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY or int(parsed.get("version", 0)) != 1:
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var version := int(parsed.get("version", 0))
+	if version < 1 or version > SAVE_VERSION:
 		return
 	var winners = parsed.get("semifinal_winners", [])
 	if typeof(winners) == TYPE_ARRAY:
-		_semifinal_winners = winners
+		for winner in winners:
+			var id := str(winner)
+			if id != "" and id not in _semifinal_winners:
+				_semifinal_winners.append(id)
 	_champion_id = str(parsed.get("champion_id", ""))
+	_championship_purse_paid = bool(parsed.get("championship_purse_paid", false))
