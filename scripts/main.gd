@@ -1,10 +1,10 @@
 extends Node2D
 
+const ContentCatalog = preload("res://scripts/content_catalog.gd")
 const PLAYER_SPEED := 185.0
 const AI_SPEED := 138.0
 const COURT := Rect2(70.0, 62.0, 500.0, 250.0)
 const BALL_RADIUS := 7.0
-const MATCH_LENGTH := 180.0
 
 var player_position := Vector2(240.0, 190.0)
 var opponent_position := Vector2(430.0, 190.0)
@@ -12,7 +12,11 @@ var ball_position := Vector2(320.0, 180.0)
 var ball_velocity := Vector2.ZERO
 var home_score := 0
 var away_score := 0
-var match_time := MATCH_LENGTH
+var match_time := 180.0
+var match_length := 180.0
+var ring_points := 5
+var wall_points := 1
+var wall_rebound := 0.82
 var possession_owner := 0
 var stamina := 100.0
 var opponent_stamina := 100.0
@@ -20,9 +24,18 @@ var tackle_timer := 0.0
 var opponent_tackle_timer := 0.0
 var last_score_text := "FIRST BALL"
 var score_banner_timer := 2.0
+var home_team_name := "JAGUAR SUN"
+var away_team_name := "OBSIDIAN REED"
+var court_name := "STONE COURT"
+var teams: Array = []
+var rulesets: Array = []
+var courts: Array = []
+var league: Dictionary = {}
 
 func _ready() -> void:
 	_configure_input()
+	_load_content()
+	_reset_match()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -39,8 +52,45 @@ func _process(delta: float) -> void:
 	else:
 		possession_owner = 0
 		ball_velocity = Vector2.ZERO
-
 	queue_redraw()
+
+func _load_content() -> void:
+	var teams_data = ContentCatalog.load_json("res://data/teams.json")
+	var rules_data = ContentCatalog.load_json("res://data/rules.json")
+	var courts_data = ContentCatalog.load_json("res://data/courts.json")
+	var league_data = ContentCatalog.load_json("res://data/league.json")
+
+	if typeof(teams_data) == TYPE_DICTIONARY:
+		teams = teams_data.get("teams", [])
+		if teams.size() > 0:
+			home_team_name = str(teams[0].get("name", home_team_name)).to_upper()
+		if teams.size() > 1:
+			away_team_name = str(teams[1].get("name", away_team_name)).to_upper()
+	if typeof(rules_data) == TYPE_DICTIONARY:
+		rulesets = rules_data.get("rulesets", [])
+		if not rulesets.is_empty():
+			var active: Dictionary = rulesets[0]
+			match_length = float(active.get("match_seconds", match_length))
+			ring_points = int(active.get("ring_points", ring_points))
+			wall_points = int(active.get("wall_points", wall_points))
+	if typeof(courts_data) == TYPE_DICTIONARY:
+		courts = courts_data.get("courts", [])
+		if not courts.is_empty():
+			var active_court: Dictionary = courts[0]
+			court_name = str(active_court.get("name", court_name)).to_upper()
+			wall_rebound = float(active_court.get("rebound", wall_rebound))
+	if typeof(league_data) == TYPE_DICTIONARY:
+		league = league_data
+
+func _reset_match() -> void:
+	home_score = 0
+	away_score = 0
+	match_time = match_length
+	stamina = 100.0
+	opponent_stamina = 100.0
+	last_score_text = "FIRST BALL"
+	score_banner_timer = 2.0
+	_reset_ball()
 
 func _update_player(delta: float) -> void:
 	var movement := Input.get_vector("move_left", "move_right", "move_up", "move_down")
@@ -48,7 +98,6 @@ func _update_player(delta: float) -> void:
 	player_position += movement * PLAYER_SPEED * delta
 	player_position = _clamp_to_court(player_position)
 	stamina = clampf(stamina + (16.0 if not moving else -3.0) * delta, 0.0, 100.0)
-
 	if possession_owner == 1:
 		ball_position = player_position + Vector2(16.0, 3.0)
 		if Input.is_action_just_pressed("pass_ball"):
@@ -63,13 +112,11 @@ func _update_opponent(delta: float) -> void:
 		target = Vector2(COURT.position.x + 90.0, COURT.get_center().y)
 	elif possession_owner == 1:
 		target = player_position
-
 	var direction := opponent_position.direction_to(target)
 	var speed := AI_SPEED + (18.0 if possession_owner == 1 else 0.0)
 	opponent_position += direction * speed * delta
 	opponent_position = _clamp_to_court(opponent_position)
 	opponent_stamina = clampf(opponent_stamina + (12.0 if direction.length_squared() < 0.01 else -2.0) * delta, 0.0, 100.0)
-
 	if possession_owner == 2:
 		ball_position = opponent_position + Vector2(-16.0, 3.0)
 		if opponent_position.x < COURT.get_center().x + 30.0:
@@ -81,8 +128,8 @@ func _update_ball(delta: float) -> void:
 		return
 	ball_position += ball_velocity * delta
 	ball_velocity = ball_velocity.move_toward(Vector2.ZERO, 92.0 * delta)
-	_check_ring_score()
-	_check_end_zone_score()
+	if _check_ring_score() or _check_end_zone_score():
+		return
 	_bounce_ball()
 
 func _resolve_possession() -> void:
@@ -104,7 +151,6 @@ func _resolve_tackles() -> void:
 				possession_owner = 0
 				ball_position = opponent_position.lerp(player_position, 0.45)
 				ball_velocity = player_position.direction_to(opponent_position) * 110.0
-
 	if possession_owner == 1 and opponent_tackle_timer <= 0.0 and opponent_position.distance_to(player_position) < 29.0:
 		opponent_tackle_timer = 0.8
 		if opponent_stamina >= 10.0:
@@ -124,35 +170,40 @@ func _release_ball(direction: Vector2, speed: float) -> void:
 func _bounce_ball() -> void:
 	if ball_position.x < COURT.position.x + BALL_RADIUS:
 		ball_position.x = COURT.position.x + BALL_RADIUS
-		ball_velocity.x = absf(ball_velocity.x) * 0.82
+		ball_velocity.x = absf(ball_velocity.x) * wall_rebound
 	elif ball_position.x > COURT.end.x - BALL_RADIUS:
 		ball_position.x = COURT.end.x - BALL_RADIUS
-		ball_velocity.x = -absf(ball_velocity.x) * 0.82
-
+		ball_velocity.x = -absf(ball_velocity.x) * wall_rebound
 	if ball_position.y < COURT.position.y + BALL_RADIUS:
 		ball_position.y = COURT.position.y + BALL_RADIUS
-		ball_velocity.y = absf(ball_velocity.y) * 0.82
+		ball_velocity.y = absf(ball_velocity.y) * wall_rebound
 	elif ball_position.y > COURT.end.y - BALL_RADIUS:
 		ball_position.y = COURT.end.y - BALL_RADIUS
-		ball_velocity.y = -absf(ball_velocity.y) * 0.82
+		ball_velocity.y = -absf(ball_velocity.y) * wall_rebound
 
-func _check_ring_score() -> void:
+func _check_ring_score() -> bool:
 	var left_ring := Vector2(COURT.position.x + 18.0, COURT.get_center().y)
 	var right_ring := Vector2(COURT.end.x - 18.0, COURT.get_center().y)
 	if ball_position.distance_to(left_ring) < 13.0 and ball_velocity.x < -120.0:
-		_award_score(2, 5, "RING SHOT")
-	elif ball_position.distance_to(right_ring) < 13.0 and ball_velocity.x > 120.0:
-		_award_score(1, 5, "RING SHOT")
+		_award_score(2, ring_points, "RING SHOT")
+		return true
+	if ball_position.distance_to(right_ring) < 13.0 and ball_velocity.x > 120.0:
+		_award_score(1, ring_points, "RING SHOT")
+		return true
+	return false
 
-func _check_end_zone_score() -> void:
+func _check_end_zone_score() -> bool:
 	var lane_top := COURT.get_center().y - 48.0
 	var lane_bottom := COURT.get_center().y + 48.0
 	if ball_position.y < lane_top or ball_position.y > lane_bottom:
-		return
-	if ball_position.x <= COURT.position.x + 9.0 and ball_velocity.x < 0.0:
-		_award_score(2, 1, "WALL SCORE")
-	elif ball_position.x >= COURT.end.x - 9.0 and ball_velocity.x > 0.0:
-		_award_score(1, 1, "WALL SCORE")
+		return false
+	if ball_position.x <= COURT.position.x + BALL_RADIUS and ball_velocity.x < 0.0:
+		_award_score(2, wall_points, "WALL SCORE")
+		return true
+	if ball_position.x >= COURT.end.x - BALL_RADIUS and ball_velocity.x > 0.0:
+		_award_score(1, wall_points, "WALL SCORE")
+		return true
+	return false
 
 func _award_score(team: int, points: int, label: String) -> void:
 	if team == 1:
@@ -171,10 +222,7 @@ func _reset_ball() -> void:
 	opponent_position = Vector2(400.0, 190.0)
 
 func _clamp_to_court(point: Vector2) -> Vector2:
-	return Vector2(
-		clampf(point.x, COURT.position.x + 12.0, COURT.end.x - 12.0),
-		clampf(point.y, COURT.position.y + 12.0, COURT.end.y - 12.0)
-	)
+	return Vector2(clampf(point.x, COURT.position.x + 12.0, COURT.end.x - 12.0), clampf(point.y, COURT.position.y + 12.0, COURT.end.y - 12.0))
 
 func _configure_input() -> void:
 	_add_key_action("move_left", KEY_A)
@@ -202,19 +250,17 @@ func _draw() -> void:
 	draw_rect(COURT, Color("463522"))
 	draw_rect(COURT, Color("b99b65"), false, 3.0)
 	draw_line(Vector2(COURT.get_center().x, COURT.position.y), Vector2(COURT.get_center().x, COURT.end.y), Color("7d6743"), 2.0)
-
 	var left_ring := Vector2(COURT.position.x + 18.0, COURT.get_center().y)
 	var right_ring := Vector2(COURT.end.x - 18.0, COURT.get_center().y)
 	draw_arc(left_ring, 13.0, 0.0, TAU, 24, Color("d2b87c"), 4.0)
 	draw_arc(right_ring, 13.0, 0.0, TAU, 24, Color("d2b87c"), 4.0)
-
 	draw_circle(ball_position, BALL_RADIUS, Color("1d1710"))
 	draw_circle(player_position, 11.0, Color("d5c39a"))
 	draw_line(player_position, player_position + Vector2(18.0, 0.0), Color("8b2c22"), 4.0)
 	draw_circle(opponent_position, 11.0, Color("9b563d"))
 	draw_line(opponent_position, opponent_position + Vector2(-18.0, 0.0), Color("1f2c32"), 4.0)
-
-	draw_rect(Rect2(8, 8, 624, 38), Color("090806"))
-	draw_string(ThemeDB.fallback_font, Vector2(16, 31), "OBSIDIAN RING  HOME %02d  %03d  AWAY %02d  STA %03d" % [home_score, int(ceil(match_time)), away_score, int(stamina)], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("eadcae"))
+	draw_rect(Rect2(8, 8, 624, 43), Color("090806"))
+	draw_string(ThemeDB.fallback_font, Vector2(16, 27), "%s %02d   %03d   %02d %s" % [home_team_name, home_score, int(ceil(match_time)), away_score, away_team_name], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("eadcae"))
+	draw_string(ThemeDB.fallback_font, Vector2(16, 45), "%s  STA %03d" % [court_name, int(stamina)], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("bca777"))
 	if score_banner_timer > 0.0:
-		draw_string(ThemeDB.fallback_font, Vector2(250, 55), last_score_text, HORIZONTAL_ALIGNMENT_CENTER, 140, 15, Color("f2d47d"))
+		draw_string(ThemeDB.fallback_font, Vector2(250, 62), last_score_text, HORIZONTAL_ALIGNMENT_CENTER, 140, 15, Color("f2d47d"))
