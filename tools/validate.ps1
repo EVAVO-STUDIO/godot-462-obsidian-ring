@@ -28,7 +28,7 @@ $Required = @(
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
     'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
-    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd','tools/fixture_simulation_self_test.gd','tools/replay_guard_self_test.gd','tools/season_end_self_test.gd','tools/postseason_save_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -163,7 +163,7 @@ foreach ($Token in @('user_qualified','terminal_reason','NO_PLAYOFF_BERTH','SEMI
 $SeasonEndDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_director.gd')
 foreach ($Token in @('process_priority = -100','action_erase_events','_semifinal_winners','_champion_id','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing hardening token: $Token" } }
+foreach ($Token in @('SAVE_VERSION := 3','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred','version < 2','fatigue_carry')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing v3 canonical-state token: $Token" } }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
@@ -185,6 +185,9 @@ if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring replay guard self-test failed wi
 Write-Host 'Running season-end self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/season_end_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring season-end self-test failed with exit code $LASTEXITCODE" }
+Write-Host 'Running canonical postseason-save self-test...' -ForegroundColor DarkCyan
+& $Godot --headless --path $Root --script res://tools/postseason_save_self_test.gd
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring postseason save self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running Godot editor smoke test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --editor --quit
 if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
