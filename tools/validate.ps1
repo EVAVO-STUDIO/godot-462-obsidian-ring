@@ -25,7 +25,8 @@ $Required = @(
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd',
     'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
-    'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','tools/runtime_self_test.gd','tools/court_hazard_self_test.gd',
+    'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
+    'tools/runtime_self_test.gd','tools/court_hazard_self_test.gd',
     'data/teams.json','data/rules.json','data/courts.json','data/league.json','data/player_roles.json','data/rosters.json','data/fixtures.json',
     'docs/GAME_DESIGN.md','docs/ARCHITECTURE.md','docs/QA.md'
 )
@@ -53,6 +54,7 @@ $CourtIds = @($Courts.courts | ForEach-Object { $_.id })
 $RoleIds = @($Roles.roles | ForEach-Object { $_.id })
 $AllowedHazards = @('narrow_sidelines','low_friction','fast_walls')
 foreach ($Court in $Courts.courts) {
+    if ([double]$Court.width -le 0 -or [double]$Court.height -le 0) { throw "Court dimensions must be positive: $($Court.id)" }
     if ([double]$Court.rebound -le 0 -or [double]$Court.rebound -gt 1.25) { throw "Court rebound out of range: $($Court.id)" }
     foreach ($Hazard in @($Court.hazards)) {
         if ($AllowedHazards -notcontains $Hazard) { throw "Unknown court hazard: $($Court.id) -> $Hazard" }
@@ -131,7 +133,8 @@ foreach ($Autoload in @(
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"',
     'ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"',
-    'CourtHazardDirector="*res://scripts/court_hazard_director.gd"'
+    'CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
+    'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"'
 )) {
     if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" }
 }
@@ -142,6 +145,10 @@ foreach ($Token in @('DisciplineRules.apply_booking','PlayoffRules.semifinal_pai
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) {
     if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" }
+}
+$RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
+foreach ($Token in @('best_substitute_candidate','preferred_role','suspension_matches')) {
+    if (-not $RosterText.Contains($Token)) { throw "Roster rules missing substitution token: $Token" }
 }
 $ConditionRulesText = Get-Content -Raw (Join-Path $Root 'scripts/condition_rules.gd')
 foreach ($Token in @('MAX_FATIGUE_CARRY','carry_from_end_stamina','recover_bench_carry','starting_stamina')) {
@@ -155,13 +162,21 @@ $FatigueText = Get-Content -Raw (Join-Path $Root 'scripts/fatigue_director.gd')
 foreach ($Token in @('LOW_STAMINA_THRESHOLD','MIN_PERFORMANCE_MULT','base_speed_mult','request_emergency_substitution')) {
     if (-not $FatigueText.Contains($Token)) { throw "Fatigue director missing token: $Token" }
 }
-$CourtRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_rules.gd')
-foreach ($Token in @('low_friction','fast_walls','narrow_sidelines','effective_rebound','vertical_margin')) {
-    if (-not $CourtRulesText.Contains($Token)) { throw "Court hazard rules missing token: $Token" }
+$HazardRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_rules.gd')
+foreach ($Token in @('low_friction_drag_compensation','effective_rebound','vertical_margin')) {
+    if (-not $HazardRulesText.Contains($Token)) { throw "Court hazard rules missing token: $Token" }
 }
-$CourtDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_director.gd')
-foreach ($Token in @('process_priority = 120','_apply_low_friction','_apply_narrow_sidelines','CourtHazardRules.effective_rebound')) {
-    if (-not $CourtDirectorText.Contains($Token)) { throw "Court hazard director missing token: $Token" }
+$HazardDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_director.gd')
+foreach ($Token in @('low_friction','fast_walls','narrow_sidelines','wall_rebound')) {
+    if (-not $HazardDirectorText.Contains($Token)) { throw "Court hazard director missing token: $Token" }
+}
+$GeometryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_rules.gd')
+foreach ($Token in @('REFERENCE_WIDTH','REFERENCE_HEIGHT','movement_rect','clamp_player')) {
+    if (-not $GeometryRulesText.Contains($Token)) { throw "Court geometry rules missing token: $Token" }
+}
+$GeometryDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_director.gd')
+foreach ($Token in @('CourtGeometryRules.movement_rect','CourtGeometryRules.clamp_player','home_players','away_players')) {
+    if (-not $GeometryDirectorText.Contains($Token)) { throw "Court geometry director missing token: $Token" }
 }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
 foreach ($Token in @('_sanitize_table','_sanitize_rosters','MAX_FUNDS','max_reasonable_round','fatigue_carry')) {
@@ -176,9 +191,9 @@ if (-not $Godot) {
 Write-Host 'Running deterministic runtime rules self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/runtime_self_test.gd
 if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring runtime self-test failed with exit code $LASTEXITCODE" }
-Write-Host 'Running court hazard self-test...' -ForegroundColor DarkCyan
+Write-Host 'Running court hazard/geometry self-test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --script res://tools/court_hazard_self_test.gd
-if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring court hazard self-test failed with exit code $LASTEXITCODE" }
+if ($LASTEXITCODE -ne 0) { throw "Obsidian Ring court self-test failed with exit code $LASTEXITCODE" }
 Write-Host 'Running Godot editor smoke test...' -ForegroundColor DarkCyan
 & $Godot --headless --path $Root --editor --quit
 if ($LASTEXITCODE -ne 0) { throw "Godot headless validation failed with exit code $LASTEXITCODE" }
