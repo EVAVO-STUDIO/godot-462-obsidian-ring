@@ -124,6 +124,7 @@ func _sanitize_rosters(scene: Object, saved) -> Array:
 			next["suspension_matches"] = maxi(0, int(next.get("suspension_matches", 0)))
 			next["booking_points"] = maxi(0, int(next.get("booking_points", 0)))
 			next["suspensions_served"] = maxi(0, int(next.get("suspensions_served", 0)))
+			next["fatigue_carry"] = clampi(int(next.get("fatigue_carry", 0)), 0, 40)
 			next_players.append(next)
 		if next_players.size() < 3:
 			continue
