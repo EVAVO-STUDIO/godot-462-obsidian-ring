@@ -1,8 +1,11 @@
 extends Node
 
 const RosterSaveRules = preload("res://scripts/roster_save_rules.gd")
+const SaveRecoveryRules = preload("res://scripts/save_recovery_rules.gd")
 const SAVE_PATH := "user://obsidian_ring_season.json"
+const BACKUP_PATH := "user://obsidian_ring_season.bak.json"
 const SAVE_VERSION := 3
+const MIN_SAVE_VERSION := 2
 const SAVE_INTERVAL := 1.0
 const MAX_FUNDS := 99999999
 
@@ -131,26 +134,41 @@ func _signature(scene: Object) -> String:
 	return JSON.stringify(_snapshot(scene))
 
 func _save(scene: Object) -> void:
+	var snapshot_text := JSON.stringify(_snapshot(scene), "  ")
+	_backup_valid_primary()
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		push_warning("Obsidian Ring season save could not be opened for writing.")
 		return
-	file.store_string(JSON.stringify(_snapshot(scene), "  "))
+	file.store_string(snapshot_text)
+
+func _backup_valid_primary() -> void:
+	var primary_text := _read_text(SAVE_PATH)
+	if SaveRecoveryRules.parse_supported_json(primary_text, MIN_SAVE_VERSION, SAVE_VERSION).is_empty():
+		return
+	var backup := FileAccess.open(BACKUP_PATH, FileAccess.WRITE)
+	if backup != null:
+		backup.store_string(primary_text)
+
+func _read_text(path: String) -> String:
+	if not FileAccess.file_exists(path):
+		return ""
+	var file := FileAccess.open(path, FileAccess.READ)
+	return file.get_as_text() if file != null else ""
 
 func _restore(scene: Object) -> void:
-	if not FileAccess.file_exists(SAVE_PATH):
+	var chosen := SaveRecoveryRules.choose_primary_or_backup(
+		_read_text(SAVE_PATH),
+		_read_text(BACKUP_PATH),
+		MIN_SAVE_VERSION,
+		SAVE_VERSION
+	)
+	var parsed = chosen.get("data", {})
+	if typeof(parsed) != TYPE_DICTIONARY or parsed.is_empty():
 		return
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-	if file == null:
-		return
-	var parsed = JSON.parse_string(file.get_as_text())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		push_warning("Obsidian Ring save ignored because it is invalid.")
-		return
+	if str(chosen.get("source", "primary")) == "backup":
+		push_warning("Obsidian Ring recovered season state from backup save.")
 	var version := int(parsed.get("version", -1))
-	if version < 2 or version > SAVE_VERSION:
-		push_warning("Obsidian Ring save ignored because it is from an unsupported version.")
-		return
 	scene.set("funds", clampi(int(parsed.get("funds", scene.get("funds"))), 0, MAX_FUNDS))
 	var max_reasonable_round := _season_rounds(scene) + 3
 	scene.set("match_number", clampi(int(parsed.get("match_number", scene.get("match_number"))), 1, max_reasonable_round))
