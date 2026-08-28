@@ -1,0 +1,44 @@
+{
+  "teams": [
+    {
+      "id": "jaguar_house",
+      "name": "Jaguar House",
+      "home_court": "basalt_court",
+      "attack": 7,
+      "defence": 8,
+      "speed": 6,
+      "discipline": 7,
+      "identity": "physical defence, hard tackles, patient ring attacks"
+    },
+    {
+      "id": "quetzal_runners",
+      "name": "Quetzal Runners",
+      "home_court": "painted_court",
+      "attack": 8,
+      "defence": 5,
+      "speed": 9,
+      "discipline": 6,
+      "identity": "fast transitions, angled wall passes, high-risk ring shots"
+    },
+    {
+      "id": "obsidian_guard",
+      "name": "Obsidian Guard",
+      "home_court": "temple_court",
+      "attack": 6,
+      "defence": 9,
+      "speed": 5,
+      "discipline": 8,
+      "identity": "possession pressure, stamina, compact defensive shape"
+    },
+    {
+      "id": "sun_serpents",
+      "name": "Sun Serpents",
+      "home_court": "sunken_court",
+      "attack": 9,
+      "defence": 5,
+      "speed": 8,
+      "discipline": 5,
+      "identity": "aggressive scoring, dangerous tackles, volatile momentum"
+    }
+  ]
+}
