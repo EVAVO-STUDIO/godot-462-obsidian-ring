@@ -1,0 +1,41 @@
+# Godot
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+
+# Mono / C#
+.mono/
+*.csproj
+*.sln
+
+# Builds
+build/
+builds/
+dist/
+exports/
+
+# IDE
+.vscode/
+.idea/
+.vs/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs / temp
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+temp/
+tmp/
+.cache/
+
+# Secrets
+.env
+.env.*
+!.env.example
