@@ -16,12 +16,13 @@ Implemented now:
 - power strikes
 - wall rebounds and ball slowdown
 - stamina-cost tackles and possession knock-loose behavior
-- five-point ring scoring
-- one-point end-wall scoring lane
+- data-driven ring and wall scoring values
+- data-driven match duration and court rebound behavior
+- team names and court identity loaded from runtime catalogues
 - match clock and scoreboard
 - score event banner
-- initial fictional team catalogue
-- configurable arcade/tournament rules seed data
+- fictional team catalogue
+- configurable rules, courts and league progression data
 - local PowerShell validation with optional Godot headless smoke test
 
 The game is deliberately Mesoamerican-inspired rather than presented as a universal historical reconstruction. Fictional teams, league rules and exaggerated arcade mechanics are clearly separated from historical reference work.
@@ -38,10 +39,13 @@ The game is deliberately Mesoamerican-inspired rather than presented as a univer
 
 - `project.godot` — Godot project configuration
 - `scenes/` — game scenes
-- `scripts/` — runtime gameplay code
+- `scripts/` — runtime gameplay code and content-loading helpers
 - `data/teams.json` — fictional team identities and ratings
-- `data/rules.json` — ruleset/scoring configuration seed data
+- `data/rules.json` — ruleset/scoring configuration
+- `data/courts.json` — court identities and surface/rebound parameters
+- `data/league.json` — progression/economy seed data
 - `docs/GAME_DESIGN.md` — game pillars, cultural guardrails and roadmap
+- `docs/QA.md` — match integrity and regression checklist
 - `tools/validate.ps1` — zero-cost local validation
 
 ## Validate locally
