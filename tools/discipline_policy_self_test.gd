@@ -2,6 +2,7 @@ extends SceneTree
 
 const DisciplineRules = preload("res://scripts/discipline_rules.gd")
 const FoulLedgerRules = preload("res://scripts/foul_ledger_rules.gd")
+const ManagementSummaryRules = preload("res://scripts/management_summary_rules.gd")
 
 var failures: Array[String] = []
 
@@ -9,6 +10,7 @@ func _initialize() -> void:
 	_test_default_policy()
 	_test_custom_policy()
 	_test_foul_attribution()
+	_test_management_summary()
 	if failures.is_empty():
 		print("Obsidian Ring discipline policy self-test passed.")
 		quit(0)
@@ -50,6 +52,18 @@ func _test_foul_attribution() -> void:
 	_expect(str(away_actor.get("id", "")) == "a0", "away foul should resolve to exact nearest AI tackler used by live tackle branch")
 	var event := FoulLedgerRules.make_event("away", away_actor, 5, 3)
 	_expect(str(event.get("actor_id", "")) == "a0" and int(event.get("round", 0)) == 5 and int(event.get("serial", 0)) == 3, "foul event should preserve actor round and serial")
+
+func _test_management_summary() -> void:
+	var player := {"name":"IKA","injury_matches":1,"suspension_matches":2,"booking_points":3,"fatigue_carry":14}
+	var line := ManagementSummaryRules.player_line(player)
+	_expect(line.contains("IKA") and line.contains("INJ 1") and line.contains("SUSP 2") and line.contains("BOOK 3") and line.contains("FAT 14"), "management summary should expose selected player condition")
+	var foul := ManagementSummaryRules.foul_line({"round":7,"team":"away","actor_name":"TALA"})
+	_expect(foul.contains("R07") and foul.contains("AWAY") and foul.contains("TALA"), "management summary should expose latest foul actor")
+	_expect(ManagementSummaryRules.postseason_line([], "jaguar_house").contains("JAGUAR HOUSE"), "management summary should expose champion identity")
+	var project := FileAccess.open("res://project.godot", FileAccess.READ)
+	_expect(project != null, "project.godot should be readable for management summary autoload check")
+	if project != null:
+		_expect(project.get_as_text().contains("ManagementSummaryDirector=\"*res://scripts/management_summary_director.gd\""), "management summary director must remain autoloaded")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
