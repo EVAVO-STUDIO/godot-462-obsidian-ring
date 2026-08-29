@@ -1,18 +1,8 @@
 class_name DisciplineRules
 extends RefCounted
 
-static var _booking_threshold := 3
-static var _suspension_length := 1
-
-static func configure(booking_threshold: int, suspension_length: int) -> void:
-	_booking_threshold = maxi(1, booking_threshold)
-	_suspension_length = maxi(1, suspension_length)
-
-static func booking_threshold() -> int:
-	return _booking_threshold
-
-static func suspension_length() -> int:
-	return _suspension_length
+const DEFAULT_BOOKING_THRESHOLD := 3
+const DEFAULT_SUSPENSION_LENGTH := 1
 
 static func booking_points_for_foul(force: float, discipline: float) -> int:
 	var severity := force - discipline * 8.0
@@ -23,16 +13,16 @@ static func booking_points_for_foul(force: float, discipline: float) -> int:
 	return 0
 
 static func suspension_matches(total_booking_points: int, booking_threshold_override: int = -1, suspension_length_override: int = -1) -> int:
-	var threshold := _booking_threshold if booking_threshold_override < 1 else booking_threshold_override
-	var length := _suspension_length if suspension_length_override < 1 else suspension_length_override
+	var threshold := DEFAULT_BOOKING_THRESHOLD if booking_threshold_override < 1 else booking_threshold_override
+	var length := DEFAULT_SUSPENSION_LENGTH if suspension_length_override < 1 else suspension_length_override
 	if total_booking_points < threshold:
 		return 0
 	return maxi(1, length)
 
 static func apply_booking(player: Dictionary, booking_points: int, booking_threshold_override: int = -1, suspension_length_override: int = -1) -> Dictionary:
 	var next := player.duplicate(true)
-	var threshold := _booking_threshold if booking_threshold_override < 1 else booking_threshold_override
-	var length := _suspension_length if suspension_length_override < 1 else suspension_length_override
+	var threshold := DEFAULT_BOOKING_THRESHOLD if booking_threshold_override < 1 else booking_threshold_override
+	var length := DEFAULT_SUSPENSION_LENGTH if suspension_length_override < 1 else suspension_length_override
 	var current := maxi(0, int(next.get("booking_points", 0)))
 	var total := maxi(0, current + maxi(0, booking_points))
 	next["booking_points"] = total
