@@ -7,6 +7,10 @@ const MIN_PERFORMANCE_MULT := 0.72
 var _scene_id := 0
 var _last_match_number := -1
 
+func _ready() -> void:
+	# ConditionDirector runs at 150 and must apply carried starting stamina first.
+	process_priority = 170
+
 func _process(_delta: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null or not _supports(scene):
