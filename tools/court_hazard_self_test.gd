@@ -52,6 +52,13 @@ func _test_source_owned_geometry() -> void:
 		_expect(source.contains("court_rect.size.y*0.192"), "wall scoring aperture should scale with live court height")
 		_expect(source.contains("draw_rect(court_rect"), "rendering should use the same live court rectangle")
 		_expect(source.contains("_formation_positions(true)") and source.contains("_formation_positions(false)"), "formations should derive from live court geometry")
+	var hazard_file := FileAccess.open("res://scripts/court_hazard_director.gd", FileAccess.READ)
+	_expect(hazard_file != null, "court hazard director should be readable")
+	if hazard_file != null:
+		var hazard_source := hazard_file.get_as_text()
+		_expect(hazard_source.contains('scene.get("court_rect")'), "narrow sideline hazard should consume live court geometry")
+		_expect(hazard_source.contains("rect.position.y + margin") and hazard_source.contains("rect.end.y - margin"), "narrow sideline clamp should refine live court bounds")
+		_expect(not hazard_source.contains("COURT_TOP") and not hazard_source.contains("COURT_BOTTOM"), "hazards must not reintroduce fixed court boundaries")
 	var project := FileAccess.open("res://project.godot", FileAccess.READ)
 	_expect(project != null, "project.godot should be readable for geometry autoload checks")
 	if project != null:
