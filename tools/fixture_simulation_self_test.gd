@@ -8,6 +8,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	_test_simulation()
 	_test_roster_context()
+	_test_roster_wear()
 	_test_schedule_balance()
 	_test_result_round_lifecycle()
 	_test_ai_roster_recovery_boundary()
@@ -53,6 +54,32 @@ func _test_roster_context() -> void:
 	_expect(int(contextual.get("roster_strength_modifier", 0)) == FixtureSimulationRules.roster_strength_modifier(depleted), "team context should preserve exact roster modifier")
 	_expect(FixtureSimulationRules.team_strength(FixtureSimulationRules.with_roster_context(team, healthy)) > FixtureSimulationRules.team_strength(contextual), "roster context should affect deterministic team strength")
 
+func _test_roster_wear() -> void:
+	var roster := {"team_id":"obsidian_guard","players":[
+		{"id":"a","skill":8,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"b","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"c","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"d","skill":6,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"e","skill":6,"injury_matches":2,"suspension_matches":0,"fatigue_carry":12}
+	]}
+	var first := FixtureSimulationRules.simulate_roster_wear(roster, "sun_serpents", 4, true)
+	var repeat := FixtureSimulationRules.simulate_roster_wear(roster, "sun_serpents", 4, true)
+	_expect(first == repeat, "AI fixture wear must be deterministic for the same teams/round/home state")
+	var first_players: Array = first.get("players", [])
+	for i in range(4):
+		_expect(int(first_players[i].get("fatigue_carry", 0)) >= FixtureSimulationRules.AI_MATCH_FATIGUE_MIN, "eligible AI player should receive bounded post-match fatigue")
+		_expect(int(first_players[i].get("fatigue_carry", 0)) <= FixtureSimulationRules.MAX_FATIGUE_CARRY, "AI match fatigue should remain capped")
+	_expect(int(first_players[4].get("fatigue_carry", -1)) == 12, "already injured unavailable player must not accumulate hidden fixture fatigue")
+	_expect(int(first_players[4].get("injury_matches", -1)) == 2, "off-screen wear must not rewrite existing unavailable injury state")
+	var minimum_three := {"team_id":"three","players":[
+		{"id":"a","injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"b","injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"c","injury_matches":0,"suspension_matches":0,"fatigue_carry":0}
+	]}
+	var worn_three := FixtureSimulationRules.simulate_roster_wear(minimum_three, "other", 9, false)
+	for player in worn_three.get("players", []):
+		_expect(int(player.get("injury_matches", 0)) == 0, "AI wear must not create injuries when only the minimum three players are available")
+
 func _test_schedule_balance() -> void:
 	var data = ContentCatalog.load_json("res://data/fixtures.json")
 	_expect(typeof(data) == TYPE_DICTIONARY, "fixtures catalogue should load")
@@ -93,6 +120,11 @@ func _test_result_round_lifecycle() -> void:
 		_expect(source.contains("RosterRules.roster_for_team(roster_state, away_id)"), "AI away fixture simulation should read canonical roster state")
 		_expect(source.contains("FixtureSimulationRules.with_roster_context(home, home_roster)"), "AI home strength should consume roster condition")
 		_expect(source.contains("FixtureSimulationRules.with_roster_context(away, away_roster)"), "AI away strength should consume roster condition")
+		var record_pos := source.find("LeagueRules.record_result")
+		var wear_pos := source.find("_apply_fixture_wear(scene, home_id, away_id, round_no)")
+		_expect(record_pos >= 0 and wear_pos > record_pos, "AI roster wear should apply after the fixture result is calculated/recorded")
+		_expect(source.contains("FixtureSimulationRules.simulate_roster_wear(roster, away_id, round_no, true)"), "AI home roster should receive deterministic post-match wear")
+		_expect(source.contains("FixtureSimulationRules.simulate_roster_wear(roster, home_id, round_no, false)"), "AI away roster should receive deterministic post-match wear")
 
 func _test_ai_roster_recovery_boundary() -> void:
 	var fixture_file := FileAccess.open("res://scripts/fixture_simulation_director.gd", FileAccess.READ)
