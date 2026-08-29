@@ -1,7 +1,6 @@
 extends Node
 
 const ConditionRules = preload("res://scripts/condition_rules.gd")
-const USER_TEAM_ID := "jaguar_house"
 
 var _scene_id := 0
 var _last_phase := -1
@@ -60,11 +59,14 @@ func _apply_team_start(scene: Object, property_name: String) -> void:
 	scene.set(property_name, players)
 
 func _capture_participants(scene: Object) -> void:
-	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("home_players"))
-	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("away_players"))
-	_capture_user_injuries(scene.get("home_players"))
+	var home_players: Array = scene.get("home_players")
+	var away_players: Array = scene.get("away_players")
+	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, home_players)
+	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, away_players)
+	_capture_injuries(home_players)
+	_capture_injuries(away_players)
 
-func _capture_user_injuries(players: Array) -> void:
+func _capture_injuries(players: Array) -> void:
 	for player in players:
 		if typeof(player) != TYPE_DICTIONARY:
 			continue
@@ -81,7 +83,6 @@ func _capture_end_condition(scene: Object) -> void:
 	for ri in range(rosters.size()):
 		var roster: Dictionary = rosters[ri]
 		var players: Array = roster.get("players", [])
-		var is_user_roster := str(roster.get("team_id", "")) == USER_TEAM_ID
 		for pi in range(players.size()):
 			var spec: Dictionary = players[pi]
 			var id := str(spec.get("id", ""))
@@ -89,7 +90,7 @@ func _capture_end_condition(scene: Object) -> void:
 				spec["fatigue_carry"] = ConditionRules.carry_from_end_stamina(float(_played_stamina_by_id[id]))
 			else:
 				spec["fatigue_carry"] = ConditionRules.recover_bench_carry(int(spec.get("fatigue_carry", 0)))
-			if is_user_roster and _injury_seconds_by_id.has(id):
+			if _injury_seconds_by_id.has(id):
 				var injury_seconds := float(_injury_seconds_by_id[id])
 				if injury_seconds > 0.0:
 					var injury_matches := clampi(int(ceil(injury_seconds / 6.0)), 1, 3)
