@@ -8,6 +8,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	_test_simulation()
 	_test_schedule_balance()
+	_test_result_round_lifecycle()
 	if failures.is_empty():
 		print("Obsidian Ring fixture simulation self-test passed.")
 		quit(0)
@@ -67,6 +68,23 @@ func _test_schedule_balance() -> void:
 		pair_values.append(int(count))
 	pair_values.sort()
 	_expect(pair_values == [3,3,3,3,4,4], "ten-round opponent frequencies should be optimally balanced")
+
+func _test_result_round_lifecycle() -> void:
+	var main_file := FileAccess.open("res://scripts/main.gd", FileAccess.READ)
+	_expect(main_file != null, "main.gd should be readable for result round lifecycle checks")
+	if main_file != null:
+		var source := main_file.get_as_text()
+		var result_branch := source.find("GamePhase.RESULT:")
+		var advance_call := source.find("_advance_between_matches()", result_branch)
+		var increment := source.find("match_number += 1", result_branch)
+		_expect(result_branch >= 0 and advance_call > result_branch and increment > advance_call, "match_number must advance only after completed result handling")
+	var fixture_file := FileAccess.open("res://scripts/fixture_simulation_director.gd", FileAccess.READ)
+	_expect(fixture_file != null, "fixture simulation director should be readable for completed-round checks")
+	if fixture_file != null:
+		var source := fixture_file.get_as_text()
+		_expect(source.contains('var round_no := maxi(1, int(scene.get("match_number")))'), "AI fixture simulation should use the still-current completed round")
+		_expect(source.contains("if phase == 2 and _last_phase != 2:"), "AI fixture simulation should run only on result entry")
+		_expect(source.contains("FixtureSimulationRules.fixture_needs_simulation"), "AI fixture should retain played-count duplicate protection")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
