@@ -59,6 +59,17 @@ func _initialize() -> void:
 		_expect(not source.contains('director.set("_semifinal_winners"'), "canonical save must not write private semifinal state")
 		_expect(not source.contains('director.set("_champion_id"'), "canonical save must not write private champion state")
 
+	var director_file := FileAccess.open("res://scripts/season_director.gd", FileAccess.READ)
+	_expect(director_file != null, "season_director.gd should be readable for legacy migration check")
+	if director_file != null:
+		var source := director_file.get_as_text()
+		_expect(source.contains('LEGACY_SAVE_PATH := "user://obsidian_ring_postseason.json"'), "legacy postseason path should remain identifiable for migration")
+		_expect(source.contains('CANONICAL_SAVE_PATH := "user://obsidian_ring_season.json"'), "legacy migration should know the canonical save path")
+		_expect(source.contains("func _load_legacy_state_if_needed()"), "legacy postseason state should only be loaded through migration helper")
+		_expect(source.contains("if FileAccess.file_exists(CANONICAL_SAVE_PATH):"), "canonical season save must suppress legacy migration")
+		_expect(not source.contains("func _save_state()"), "legacy postseason file must no longer have an active save writer")
+		_expect(not source.contains("FileAccess.open(LEGACY_SAVE_PATH, FileAccess.WRITE)"), "legacy postseason file must never be written by current runtime")
+
 	director.free()
 	fake.free()
 	saver.free()
