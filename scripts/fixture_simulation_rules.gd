@@ -1,6 +1,10 @@
 class_name FixtureSimulationRules
 extends RefCounted
 
+const MAX_FATIGUE_CARRY := 40
+const AI_MATCH_FATIGUE_MIN := 4
+const AI_MATCH_FATIGUE_SPAN := 7
+
 static func _id_value(id: String) -> int:
 	var total := 0
 	for i in range(id.length()):
@@ -54,6 +58,38 @@ static func simulate_fixture(home: Dictionary, away: Dictionary, round_no: int) 
 		"home_score": deterministic_score(home, away, round_no, true),
 		"away_score": deterministic_score(away, home, round_no, false)
 	}
+
+static func simulate_roster_wear(roster: Dictionary, opponent_id: String, round_no: int, home: bool) -> Dictionary:
+	var result := roster.duplicate(true)
+	var players: Array = result.get("players", [])
+	if players.is_empty():
+		return result
+	var eligible_indices: Array[int] = []
+	for i in range(players.size()):
+		var player = players[i]
+		if typeof(player) != TYPE_DICTIONARY:
+			continue
+		if int(player.get("injury_matches", 0)) <= 0 and int(player.get("suspension_matches", 0)) <= 0:
+			eligible_indices.append(i)
+	if eligible_indices.is_empty():
+		return result
+	var team_id := str(result.get("team_id", "team"))
+	var seed_value := _id_value(team_id) + _id_value(opponent_id) * 3 + maxi(1, round_no) * 131 + (17 if home else 0)
+	for order in range(eligible_indices.size()):
+		var index := eligible_indices[order]
+		var player: Dictionary = players[index]
+		var fatigue_add := AI_MATCH_FATIGUE_MIN + posmod(seed_value + order * 19 + _id_value(str(player.get("id", order))), AI_MATCH_FATIGUE_SPAN)
+		player["fatigue_carry"] = clampi(int(player.get("fatigue_carry", 0)) + fatigue_add, 0, MAX_FATIGUE_CARRY)
+		players[index] = player
+	# Roughly one injury chance in eleven team-fixtures, and never when only the minimum three are available.
+	if eligible_indices.size() > 3 and posmod(seed_value, 11) == 0:
+		var injury_slot := posmod(seed_value / 11, eligible_indices.size())
+		var injury_index := eligible_indices[injury_slot]
+		var injured: Dictionary = players[injury_index]
+		injured["injury_matches"] = maxi(int(injured.get("injury_matches", 0)), 1)
+		players[injury_index] = injured
+	result["players"] = players
+	return result
 
 static func team_played(table: Array, team_id: String) -> int:
 	for row in table:
