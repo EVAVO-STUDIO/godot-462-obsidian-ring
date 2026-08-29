@@ -3,8 +3,9 @@ extends Node
 const DisciplineRules = preload("res://scripts/discipline_rules.gd")
 const LeagueRules = preload("res://scripts/league_rules.gd")
 const PlayoffRules = preload("res://scripts/playoff_rules.gd")
-const SAVE_PATH := "user://obsidian_ring_postseason.json"
-const SAVE_VERSION := 2
+const LEGACY_SAVE_PATH := "user://obsidian_ring_postseason.json"
+const CANONICAL_SAVE_PATH := "user://obsidian_ring_season.json"
+const LEGACY_SAVE_VERSION := 2
 const USER_TEAM_ID := "jaguar_house"
 
 var _last_home_fouls := 0
@@ -25,7 +26,7 @@ func _process(_delta: float) -> void:
 		return
 	var scene_id := scene.get_instance_id()
 	if _loaded_scene_id != scene_id:
-		_load_state()
+		_load_legacy_state_if_needed()
 		_last_home_fouls = int(scene.get("home_fouls"))
 		_last_away_fouls = int(scene.get("away_fouls"))
 		_last_match_number = int(scene.get("match_number"))
@@ -189,7 +190,6 @@ func _capture_postseason_result(scene: Object) -> void:
 	elif round_no == final_round:
 		_champion_id = winner
 		_award_championship_purse(scene)
-	_save_state()
 
 func _award_championship_purse(scene: Object) -> void:
 	if _championship_purse_paid or _champion_id != USER_TEAM_ID:
@@ -286,26 +286,20 @@ func restore_postseason_state(state: Dictionary) -> void:
 	_champion_id = str(state.get("champion_id", ""))
 	_championship_purse_paid = bool(state.get("championship_purse_paid", false))
 
-func _save_state() -> void:
-	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if file == null:
-		return
-	var state := postseason_state()
-	state["version"] = SAVE_VERSION
-	file.store_string(JSON.stringify(state, "  "))
-
-func _load_state() -> void:
+func _load_legacy_state_if_needed() -> void:
 	restore_postseason_state({})
-	if not FileAccess.file_exists(SAVE_PATH):
+	if FileAccess.file_exists(CANONICAL_SAVE_PATH):
 		return
-	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if not FileAccess.file_exists(LEGACY_SAVE_PATH):
+		return
+	var file := FileAccess.open(LEGACY_SAVE_PATH, FileAccess.READ)
 	if file == null:
 		return
 	var parsed = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return
 	var version := int(parsed.get("version", 0))
-	if version < 1 or version > SAVE_VERSION:
+	if version < 1 or version > LEGACY_SAVE_VERSION:
 		return
 	restore_postseason_state(parsed)
 
