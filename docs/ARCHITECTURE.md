@@ -5,8 +5,8 @@
 - `main.gd` owns high-level game flow, temporary rendering and match orchestration.
 - `content_catalog.gd` owns JSON loading and content access helpers.
 - `match_rules.gd`, `league_rules.gd`, `roster_rules.gd`, `playoff_rules.gd` and the other `*_rules.gd` files own pure deterministic calculations.
-- Runtime directors handle narrowly scoped orchestration such as discipline policy, substitutions, fatigue, court effects, AI fixture simulation, replay protection and presentation rails.
-- `SeasonDirector` owns live postseason progression and exposes that state through the public `postseason_state()` / `restore_postseason_state()` API.
+- Runtime directors handle narrowly scoped orchestration such as substitutions, fatigue, court effects, AI fixture simulation, replay protection, foul attribution and presentation rails.
+- `SeasonDirector` owns live discipline consequences and postseason progression, and exposes postseason state through the public `postseason_state()` / `restore_postseason_state()` API.
 - `SeasonSave` is the single canonical career persistence boundary.
 - `data/` owns fictional teams, rulesets, courts, rosters, fixtures and league/career definitions.
 
@@ -49,7 +49,16 @@ The canonical season save has a validated backup. A supported valid primary is c
 
 `ConditionDirector` accumulates stamina by player ID throughout the whole match, so substituted-out participants retain their last observed stamina. Only players who never appeared receive bench recovery.
 
-`FoulLedgerDirector` records the exact attributed foul actor before `SeasonDirector` applies booking/suspension consequences. Discipline thresholds and suspension lengths come from league configuration through `DisciplinePolicyDirector`.
+`FoulLedgerDirector` records the exact attributed foul actor before `SeasonDirector` applies booking/suspension consequences.
+
+Discipline policy is owned at the booking source rather than by mutable shared state:
+
+- `SeasonDirector` reads `booking_threshold` and `suspension_matches` from the active league configuration when a booking is applied.
+- Those values are passed explicitly into `DisciplineRules.apply_booking()`.
+- `DisciplineRules` keeps only immutable fallback constants (`3` booking points and `1` suspension match).
+- The earlier `DisciplinePolicyDirector` and mutable static policy variables have been removed.
+
+This means process priority cannot change which discipline policy a foul uses.
 
 ## League integrity
 
@@ -65,6 +74,7 @@ Longer-term candidates include moving more ball/scoring court geometry to author
 
 - A scoring event resolves exactly once before rebound processing.
 - Stamina is clamped and contact actions respect cooldown/cost rules.
+- Discipline thresholds/suspension length are passed explicitly from authored league config at booking time.
 - Fictional arcade rules remain clearly separate from historical claims.
 - Team, court, player and ruleset IDs remain stable and unique.
 - Saved rosters cannot delete authored players or replace canonical identity/role data.
