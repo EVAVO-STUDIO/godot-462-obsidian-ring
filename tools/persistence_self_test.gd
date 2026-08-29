@@ -9,6 +9,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	_test_canonical_roster_merge()
 	_test_participant_accumulation()
+	_test_substituted_injury_persistence()
 	_test_condition_fatigue_order()
 	_test_save_recovery()
 	if failures.is_empty():
@@ -52,6 +53,22 @@ func _test_participant_accumulation() -> void:
 	_expect(absf(float(captured["starter"]) - 31.0) < 0.001, "substituted-out participant should retain last observed stamina")
 	_expect(absf(float(captured["other"]) - 64.0) < 0.001, "active participant stamina should update to latest observation")
 	_expect(ConditionRules.carry_from_end_stamina(float(captured["starter"])) > 0, "tired substituted-out participant should receive fatigue carry rather than bench recovery")
+
+func _test_substituted_injury_persistence() -> void:
+	var substitution_file := FileAccess.open("res://scripts/match_substitution_director.gd", FileAccess.READ)
+	_expect(substitution_file != null, "match substitution director should be readable")
+	if substitution_file == null:
+		return
+	var source := substitution_file.get_as_text()
+	_expect(source.contains("_persist_outgoing_injury(scene, outgoing)"), "live substitution must persist the outgoing player's injury before replacement")
+	_expect(source.contains('var injury_seconds := float(outgoing.get("injured", 0.0))'), "outgoing injury persistence should use the live injury timer")
+	_expect(source.contains("clampi(int(ceil(injury_seconds / 6.0)), 1, 3)"), "substitution injury conversion should match the result-path 1-3 match rule")
+	_expect(source.contains('maxi(int(spec.get("injury_matches", 0)), injury_matches)'), "substitution persistence must never shorten an existing injury")
+	var main_file := FileAccess.open("res://scripts/main.gd", FileAccess.READ)
+	_expect(main_file != null, "main.gd should remain readable for final-active injury persistence")
+	if main_file != null:
+		var main_source := main_file.get_as_text()
+		_expect(main_source.contains("_persist_match_injuries()"), "final on-court injuries should still persist at match result")
 
 func _test_condition_fatigue_order() -> void:
 	var condition_file := FileAccess.open("res://scripts/condition_director.gd", FileAccess.READ)
