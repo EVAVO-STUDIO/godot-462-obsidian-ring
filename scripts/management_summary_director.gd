@@ -18,9 +18,10 @@ func _process(_delta: float) -> void:
 	var latest_foul := _latest_foul()
 	var postseason := _postseason_state()
 	var opponent := _opponent_roster(scene)
-	_label.text = "%s\n%s\n%s\n%s" % [
+	_label.text = "%s\n%s\n%s\n%s\n%s" % [
 		ManagementSummaryRules.player_line(player),
 		ManagementSummaryRules.opponent_line(opponent, str(scene.get("away_team_name"))),
+		ManagementSummaryRules.scout_line(opponent),
 		ManagementSummaryRules.foul_line(latest_foul),
 		ManagementSummaryRules.postseason_line(postseason.get("semifinal_winners", []), str(postseason.get("champion_id", "")))
 	]
@@ -28,13 +29,13 @@ func _process(_delta: float) -> void:
 
 func _build_panel() -> void:
 	_panel = PanelContainer.new()
-	_panel.position = Vector2(108, 302)
-	_panel.size = Vector2(424, 54)
+	_panel.position = Vector2(96, 288)
+	_panel.size = Vector2(448, 68)
 	_label = Label.new()
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label.add_theme_font_size_override("font_size", 8)
-	_label.custom_minimum_size = Vector2(412, 48)
+	_label.custom_minimum_size = Vector2(436, 62)
 	_panel.add_child(_label)
 	add_child(_panel)
 	_panel.visible = false
