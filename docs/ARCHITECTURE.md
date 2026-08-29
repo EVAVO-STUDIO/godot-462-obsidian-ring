@@ -7,7 +7,7 @@
 - `match_rules.gd`, `league_rules.gd`, `roster_rules.gd`, `playoff_rules.gd` and the other `*_rules.gd` files own pure deterministic calculations.
 - Runtime directors handle narrowly scoped orchestration such as discipline policy, substitutions, fatigue, court effects, AI fixture simulation, replay protection and presentation rails.
 - `SeasonDirector` owns live postseason progression and exposes that state through the public `postseason_state()` / `restore_postseason_state()` API.
-- `SeasonSave` is the canonical career persistence boundary.
+- `SeasonSave` is the single canonical career persistence boundary.
 - `data/` owns fictional teams, rulesets, courts, rosters, fixtures and league/career definitions.
 
 ## Game flow
@@ -29,9 +29,17 @@ The title phase presents the matchup, court, selected-player management state an
 
 Roster restore starts from authored canonical rosters and merges only approved mutable fields by player ID. Missing players in a save therefore cannot delete authored bench players or rewrite identity/role data.
 
-`SeasonSave` reads and restores postseason state only through `SeasonDirector.postseason_state()` and `SeasonDirector.restore_postseason_state()`. Other directors and UI layers must use the same public API rather than reaching into `_semifinal_winners`, `_champion_id` or `_championship_purse_paid` directly.
+`SeasonSave` reads and restores postseason state only through `SeasonDirector.postseason_state()` and `SeasonDirector.restore_postseason_state()`. Other directors and UI layers use the same public API rather than reaching into `_semifinal_winners`, `_champion_id` or `_championship_purse_paid` directly.
 
-The older `obsidian_ring_postseason.json` path remains migration compatibility only. It must not become a second authoritative career state.
+## Legacy postseason migration
+
+`user://obsidian_ring_postseason.json` is read-only migration compatibility for careers created before the canonical v3 save absorbed postseason state.
+
+`SeasonDirector` checks for the canonical `user://obsidian_ring_season.json` first. If the canonical file exists, the legacy file is ignored. Only when no canonical save exists may `_load_legacy_state_if_needed()` import a supported legacy postseason file.
+
+Current runtime code never writes the legacy file. There is no active legacy `_save_state()` path. Once imported state causes a canonical career change, normal `SeasonSave` autosave captures it into the v3 canonical save and future launches ignore the legacy source.
+
+The legacy file must never become a second authoritative career state again.
 
 ## Save recovery
 
@@ -61,6 +69,7 @@ Longer-term candidates include moving more ball/scoring court geometry to author
 - Team, court, player and ruleset IDs remain stable and unique.
 - Saved rosters cannot delete authored players or replace canonical identity/role data.
 - Persistent postseason state is accessed through the public SeasonDirector API.
+- Legacy postseason persistence is migration-read-only and never written by current runtime.
 - Production art can replace prototype drawing without altering scoring or possession logic.
 - Career state remains usable offline with no paid CI or cloud runtime dependency.
 - Canonical save state is versioned, sanitized and recoverable from backup.
