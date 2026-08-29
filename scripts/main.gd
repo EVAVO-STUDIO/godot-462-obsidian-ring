@@ -5,6 +5,7 @@ const MatchRules = preload("res://scripts/match_rules.gd")
 const TeamPlayRules = preload("res://scripts/team_play_rules.gd")
 const LeagueRules = preload("res://scripts/league_rules.gd")
 const RosterRules = preload("res://scripts/roster_rules.gd")
+const CourtGeometryRules = preload("res://scripts/court_geometry_rules.gd")
 const PLAYER_SPEED := 185.0
 const AI_SPEED := 132.0
 const COURT := Rect2(70.0, 62.0, 500.0, 250.0)
@@ -36,6 +37,7 @@ var away_team_id := "quetzal_runners"
 var fixture_home_id := USER_TEAM_ID
 var fixture_away_id := "quetzal_runners"
 var court_name := "STONE COURT"
+var court_rect := COURT
 var result_text := ""
 var status_text := ""
 var status_timer := 0.0
@@ -145,6 +147,7 @@ func _apply_match_identity() -> void:
 	var venue_team := _team_for_id(fixture_home_id)
 	var court := _court_for_id(str(venue_team.get("home_court", "sunken_stone")))
 	court_name = str(court.get("name", "Stone Court")).to_upper()
+	court_rect = CourtGeometryRules.movement_rect(COURT, court)
 	wall_rebound = float(court.get("rebound", wall_rebound))
 	ring_points = int(court.get("ring_points", ring_points))
 	wall_points = int(court.get("wall_points", wall_points))
@@ -158,11 +161,20 @@ func _prepare_match() -> void:
 	last_score_text = "FIRST BALL"; score_banner_timer = 2.0; controlled_home_index = 0
 	_spawn_rosters(); _reset_ball(false)
 
+func _formation_positions(home: bool) -> Array[Vector2]:
+	var x_outer := 0.27 if home else 0.73
+	var x_inner := 0.31 if home else 0.69
+	return [
+		court_rect.position + Vector2(court_rect.size.x * x_outer, court_rect.size.y * 0.292),
+		court_rect.position + Vector2(court_rect.size.x * x_inner, court_rect.size.y * 0.512),
+		court_rect.position + Vector2(court_rect.size.x * x_outer, court_rect.size.y * 0.732)
+	]
+
 func _spawn_rosters() -> void:
 	var home_specs := RosterRules.active_three(_roster_for(home_team_id))
 	var away_specs := RosterRules.active_three(_roster_for(away_team_id))
-	var home_spawns := [Vector2(205,135), Vector2(225,190), Vector2(205,245)]
-	var away_spawns := [Vector2(435,135), Vector2(415,190), Vector2(435,245)]
+	var home_spawns := _formation_positions(true)
+	var away_spawns := _formation_positions(false)
 	home_players.clear(); away_players.clear()
 	for i in range(home_specs.size()): home_players.append(_make_player(home_spawns[i], home_specs[i], _team_for_id(home_team_id)))
 	for i in range(away_specs.size()): away_players.append(_make_player(away_spawns[i], away_specs[i], _team_for_id(away_team_id)))
@@ -305,9 +317,9 @@ func _update_team_ai(players: Array, home: bool, delta: float) -> void:
 		player["tackle_timer"] = maxf(0.0,float(player.get("tackle_timer",0.0))-delta)
 		if float(player.get("injured",0.0)) > 0.0: players[i]=player; continue
 		var position: Vector2 = player["position"]
-		var target := TeamPlayRules.support_target(i,home,COURT)
+		var target := TeamPlayRules.support_target(i,home,court_rect)
 		var owns := possession_team == (1 if home else 2) and possession_index == i
-		if owns: target = Vector2(COURT.end.x-70,COURT.get_center().y) if home else Vector2(COURT.position.x+70,COURT.get_center().y)
+		if owns: target = Vector2(court_rect.end.x-court_rect.size.x*0.14,court_rect.get_center().y) if home else Vector2(court_rect.position.x+court_rect.size.x*0.14,court_rect.get_center().y)
 		elif possession_team == 0 and TeamPlayRules.nearest_player_index(players,ball_position) == i: target = ball_position
 		elif possession_team == (2 if home else 1) and position.distance_squared_to(_carrier_position()) < 16000: target = _carrier_position()
 		var direction := position.direction_to(target)
@@ -317,8 +329,9 @@ func _update_team_ai(players: Array, home: bool, delta: float) -> void:
 		players[i]=player
 		if owns:
 			ball_position = position + Vector2(16 if home else -16,3)
-			if (home and position.x > COURT.get_center().x+90) or ((not home) and position.x < COURT.get_center().x-90):
-				var aim := Vector2(COURT.end.x-18,COURT.get_center().y) if home else Vector2(COURT.position.x+18,COURT.get_center().y)
+			var shooting_lane := court_rect.size.x * 0.18
+			if (home and position.x > court_rect.get_center().x+shooting_lane) or ((not home) and position.x < court_rect.get_center().x-shooting_lane):
+				var aim := Vector2(court_rect.end.x-18,court_rect.get_center().y) if home else Vector2(court_rect.position.x+18,court_rect.get_center().y)
 				_release_ball(position.direction_to(aim),365.0*float(player.get("shooting_mult",1.0)))
 
 func _pass_to_teammate() -> void:
@@ -395,34 +408,34 @@ func _release_ball(direction: Vector2,speed: float)->void:
 	ball_velocity=direction.normalized()*speed; possession_team=0; possession_index=-1
 
 func _bounce_ball()->void:
-	if ball_position.x<COURT.position.x+BALL_RADIUS: ball_position.x=COURT.position.x+BALL_RADIUS; ball_velocity.x=absf(ball_velocity.x)*wall_rebound
-	elif ball_position.x>COURT.end.x-BALL_RADIUS: ball_position.x=COURT.end.x-BALL_RADIUS; ball_velocity.x=-absf(ball_velocity.x)*wall_rebound
-	if ball_position.y<COURT.position.y+BALL_RADIUS: ball_position.y=COURT.position.y+BALL_RADIUS; ball_velocity.y=absf(ball_velocity.y)*wall_rebound
-	elif ball_position.y>COURT.end.y-BALL_RADIUS: ball_position.y=COURT.end.y-BALL_RADIUS; ball_velocity.y=-absf(ball_velocity.y)*wall_rebound
+	if ball_position.x<court_rect.position.x+BALL_RADIUS: ball_position.x=court_rect.position.x+BALL_RADIUS; ball_velocity.x=absf(ball_velocity.x)*wall_rebound
+	elif ball_position.x>court_rect.end.x-BALL_RADIUS: ball_position.x=court_rect.end.x-BALL_RADIUS; ball_velocity.x=-absf(ball_velocity.x)*wall_rebound
+	if ball_position.y<court_rect.position.y+BALL_RADIUS: ball_position.y=court_rect.position.y+BALL_RADIUS; ball_velocity.y=absf(ball_velocity.y)*wall_rebound
+	elif ball_position.y>court_rect.end.y-BALL_RADIUS: ball_position.y=court_rect.end.y-BALL_RADIUS; ball_velocity.y=-absf(ball_velocity.y)*wall_rebound
 
 func _check_ring_score()->bool:
-	var left:=Vector2(COURT.position.x+18,COURT.get_center().y); var right:=Vector2(COURT.end.x-18,COURT.get_center().y)
+	var left:=Vector2(court_rect.position.x+18,court_rect.get_center().y); var right:=Vector2(court_rect.end.x-18,court_rect.get_center().y)
 	if ball_position.distance_to(left)<13 and ball_velocity.x<-120: away_ring_shots+=1; _award_score(2,ring_points,"RING SHOT"); return true
 	if ball_position.distance_to(right)<13 and ball_velocity.x>120: home_ring_shots+=1; _award_score(1,ring_points,"RING SHOT"); return true
 	return false
 func _check_end_zone_score()->bool:
-	if absf(ball_position.y-COURT.get_center().y)>48: return false
-	if ball_position.x<=COURT.position.x+BALL_RADIUS and ball_velocity.x<0: _award_score(2,wall_points,"WALL SCORE"); return true
-	if ball_position.x>=COURT.end.x-BALL_RADIUS and ball_velocity.x>0: _award_score(1,wall_points,"WALL SCORE"); return true
+	if absf(ball_position.y-court_rect.get_center().y)>court_rect.size.y*0.192: return false
+	if ball_position.x<=court_rect.position.x+BALL_RADIUS and ball_velocity.x<0: _award_score(2,wall_points,"WALL SCORE"); return true
+	if ball_position.x>=court_rect.end.x-BALL_RADIUS and ball_velocity.x>0: _award_score(1,wall_points,"WALL SCORE"); return true
 	return false
 func _award_score(team:int,points:int,label:String)->void:
 	if team==1: home_score+=points
 	else: away_score+=points
 	last_score_text="%s +%d"%[label,points]; score_banner_timer=1.5; _reset_ball(true)
 func _reset_ball(preserve_stamina:=true)->void:
-	ball_position=COURT.get_center(); ball_velocity=Vector2.ZERO; possession_team=0; possession_index=-1
+	ball_position=court_rect.get_center(); ball_velocity=Vector2.ZERO; possession_team=0; possession_index=-1
 	if preserve_stamina: _reset_positions()
 	else: _spawn_rosters()
 func _reset_positions()->void:
-	var hs:=[Vector2(205,135),Vector2(225,190),Vector2(205,245)]; var as_:=[Vector2(435,135),Vector2(415,190),Vector2(435,245)]
+	var hs:=_formation_positions(true); var as_:=_formation_positions(false)
 	for i in range(home_players.size()): var p:Dictionary=home_players[i]; p["position"]=hs[i]; home_players[i]=p
 	for i in range(away_players.size()): var p:Dictionary=away_players[i]; p["position"]=as_[i]; away_players[i]=p
-func _clamp_to_court(point:Vector2)->Vector2: return Vector2(clampf(point.x,COURT.position.x+12,COURT.end.x-12),clampf(point.y,COURT.position.y+12,COURT.end.y-12))
+func _clamp_to_court(point:Vector2)->Vector2: return CourtGeometryRules.clamp_player(point,court_rect,12.0)
 
 func _configure_input()->void:
 	_add_key_action("move_left",KEY_A); _add_key_action("move_left",KEY_LEFT); _add_key_action("move_right",KEY_D); _add_key_action("move_right",KEY_RIGHT); _add_key_action("move_up",KEY_W); _add_key_action("move_up",KEY_UP); _add_key_action("move_down",KEY_S); _add_key_action("move_down",KEY_DOWN)
@@ -463,8 +476,8 @@ func _draw_result()->void:
 	draw_string(ThemeDB.fallback_font,Vector2(0,274),"ENTER NEXT ROUND    R REMATCH",HORIZONTAL_ALIGNMENT_CENTER,640,11,Color("bca777"))
 
 func _draw_match()->void:
-	draw_rect(COURT,Color("463522")); draw_rect(COURT,Color("b99b65"),false,3); draw_line(Vector2(COURT.get_center().x,COURT.position.y),Vector2(COURT.get_center().x,COURT.end.y),Color("7d6743"),2)
-	var left:=Vector2(COURT.position.x+18,COURT.get_center().y); var right:=Vector2(COURT.end.x-18,COURT.get_center().y); draw_arc(left,13,0,TAU,24,Color("d2b87c"),4); draw_arc(right,13,0,TAU,24,Color("d2b87c"),4); draw_circle(ball_position,BALL_RADIUS,Color("1d1710"))
+	draw_rect(court_rect,Color("463522")); draw_rect(court_rect,Color("b99b65"),false,3); draw_line(Vector2(court_rect.get_center().x,court_rect.position.y),Vector2(court_rect.get_center().x,court_rect.end.y),Color("7d6743"),2)
+	var left:=Vector2(court_rect.position.x+18,court_rect.get_center().y); var right:=Vector2(court_rect.end.x-18,court_rect.get_center().y); draw_arc(left,13,0,TAU,24,Color("d2b87c"),4); draw_arc(right,13,0,TAU,24,Color("d2b87c"),4); draw_circle(ball_position,BALL_RADIUS,Color("1d1710"))
 	for i in range(home_players.size()):
 		var p:Vector2=home_players[i]["position"]; var injured:=float(home_players[i].get("injured",0))>0; draw_circle(p,11,Color("725f52") if injured else Color("d5c39a")); if i==controlled_home_index: draw_arc(p,15,0,TAU,18,Color("f2d47d"),2); draw_string(ThemeDB.fallback_font,p+Vector2(-18,-15),str(home_players[i].get("name","")),HORIZONTAL_ALIGNMENT_CENTER,36,7,Color("eadcae"))
 	for player in away_players:
