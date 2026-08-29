@@ -83,7 +83,7 @@ static func simulate_roster_wear(roster: Dictionary, opponent_id: String, round_
 		players[index] = player
 	# Roughly one injury chance in eleven team-fixtures, and never when only the minimum three are available.
 	if eligible_indices.size() > 3 and posmod(seed_value, 11) == 0:
-		var injury_slot := posmod(seed_value / 11, eligible_indices.size())
+		var injury_slot := posmod(int(seed_value / 11), eligible_indices.size())
 		var injury_index := eligible_indices[injury_slot]
 		var injured: Dictionary = players[injury_index]
 		injured["injury_matches"] = maxi(int(injured.get("injury_matches", 0)), 1)
