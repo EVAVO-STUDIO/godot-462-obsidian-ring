@@ -74,6 +74,17 @@ func _test_management_summary() -> void:
 	var player := {"name":"IKA","injury_matches":1,"suspension_matches":2,"booking_points":3,"fatigue_carry":14}
 	var line := ManagementSummaryRules.player_line(player)
 	_expect(line.contains("IKA") and line.contains("INJ 1") and line.contains("SUSP 2") and line.contains("BOOK 3") and line.contains("FAT 14"), "management summary should expose selected player condition")
+	var opponent := {"team_id":"quetzal_runners","players":[
+		{"id":"a","injury_matches":0,"suspension_matches":0,"fatigue_carry":8},
+		{"id":"b","injury_matches":2,"suspension_matches":0,"fatigue_carry":12},
+		{"id":"c","injury_matches":0,"suspension_matches":1,"fatigue_carry":20},
+		{"id":"d","injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"e","injury_matches":0,"suspension_matches":0,"fatigue_carry":10}
+	]}
+	var opponent_line := ManagementSummaryRules.opponent_line(opponent, "Quetzal Runners")
+	_expect(opponent_line.contains("VS QUETZAL RUNNERS"), "management summary should identify next opponent")
+	_expect(opponent_line.contains("AVAIL 3/5") and opponent_line.contains("INJ 1") and opponent_line.contains("SUSP 1"), "management summary should expose opponent availability losses")
+	_expect(opponent_line.contains("FAT 10"), "management summary should expose opponent average fatigue")
 	var foul := ManagementSummaryRules.foul_line({"round":7,"team":"away","actor_name":"TALA"})
 	_expect(foul.contains("R07") and foul.contains("AWAY") and foul.contains("TALA"), "management summary should expose latest foul actor")
 	_expect(ManagementSummaryRules.postseason_line([], "jaguar_house").contains("JAGUAR HOUSE"), "management summary should expose champion identity")
@@ -88,6 +99,8 @@ func _test_management_summary() -> void:
 	if manager_file != null:
 		var source := manager_file.get_as_text()
 		_expect(source.contains('has_method("postseason_state")') and source.contains('director.call("postseason_state")'), "management summary should consume public postseason state API")
+		_expect(source.contains("_opponent_roster(scene)"), "management summary should read canonical opponent roster")
+		_expect(source.contains("ManagementSummaryRules.opponent_line"), "management summary should render opponent condition line")
 		_expect(not source.contains('get("_semifinal_winners")'), "management summary must not read private semifinal state")
 		_expect(not source.contains('get("_champion_id")'), "management summary must not read private champion state")
 
