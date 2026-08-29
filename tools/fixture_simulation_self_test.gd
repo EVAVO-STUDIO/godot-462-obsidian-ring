@@ -7,6 +7,7 @@ var failures: Array[String] = []
 
 func _initialize() -> void:
 	_test_simulation()
+	_test_roster_context()
 	_test_schedule_balance()
 	_test_result_round_lifecycle()
 	_test_ai_roster_recovery_boundary()
@@ -30,6 +31,27 @@ func _test_simulation() -> void:
 	_expect(FixtureSimulationRules.fixture_needs_simulation(table, "obsidian_guard", "sun_serpents", 1), "unplayed round should require simulation")
 	table[0]["played"] = 1; table[1]["played"] = 1
 	_expect(not FixtureSimulationRules.fixture_needs_simulation(table, "obsidian_guard", "sun_serpents", 1), "already-recorded AI fixture must not simulate twice")
+
+func _test_roster_context() -> void:
+	var healthy := {"team_id":"obsidian_guard","players":[
+		{"id":"a","skill":8,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"b","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":4},
+		{"id":"c","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":2},
+		{"id":"d","skill":6,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0}
+	]}
+	var depleted := {"team_id":"obsidian_guard","players":[
+		{"id":"a","skill":8,"injury_matches":2,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"b","skill":7,"injury_matches":0,"suspension_matches":1,"fatigue_carry":0},
+		{"id":"c","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":34},
+		{"id":"d","skill":6,"injury_matches":0,"suspension_matches":0,"fatigue_carry":30}
+	]}
+	_expect(FixtureSimulationRules.roster_strength_modifier(healthy) > FixtureSimulationRules.roster_strength_modifier(depleted), "healthy available roster should strengthen AI fixture simulation relative to depleted roster")
+	var unavailable := {"team_id":"x","players":[{"id":"a","injury_matches":1},{"id":"b","suspension_matches":1}]}
+	_expect(FixtureSimulationRules.roster_strength_modifier(unavailable) == -12, "fully unavailable AI roster should hit bounded minimum modifier")
+	var team := {"id":"obsidian_guard","attack":7,"defence":9,"speed":5,"discipline":8}
+	var contextual := FixtureSimulationRules.with_roster_context(team, depleted)
+	_expect(int(contextual.get("roster_strength_modifier", 0)) == FixtureSimulationRules.roster_strength_modifier(depleted), "team context should preserve exact roster modifier")
+	_expect(FixtureSimulationRules.team_strength(FixtureSimulationRules.with_roster_context(team, healthy)) > FixtureSimulationRules.team_strength(contextual), "roster context should affect deterministic team strength")
 
 func _test_schedule_balance() -> void:
 	var data = ContentCatalog.load_json("res://data/fixtures.json")
@@ -67,6 +89,10 @@ func _test_result_round_lifecycle() -> void:
 		_expect(source.contains('var round_no := maxi(1, int(scene.get("match_number")))'), "AI fixture simulation should use the still-current completed round")
 		_expect(source.contains("if phase == 2 and _last_phase != 2:"), "AI fixture simulation should run only on result entry")
 		_expect(source.contains("FixtureSimulationRules.fixture_needs_simulation"), "AI fixture should retain played-count duplicate protection")
+		_expect(source.contains("RosterRules.roster_for_team(roster_state, home_id)"), "AI home fixture simulation should read canonical roster state")
+		_expect(source.contains("RosterRules.roster_for_team(roster_state, away_id)"), "AI away fixture simulation should read canonical roster state")
+		_expect(source.contains("FixtureSimulationRules.with_roster_context(home, home_roster)"), "AI home strength should consume roster condition")
+		_expect(source.contains("FixtureSimulationRules.with_roster_context(away, away_roster)"), "AI away strength should consume roster condition")
 
 func _test_ai_roster_recovery_boundary() -> void:
 	var fixture_file := FileAccess.open("res://scripts/fixture_simulation_director.gd", FileAccess.READ)
