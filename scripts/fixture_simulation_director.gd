@@ -86,6 +86,11 @@ func _simulate_other_fixture(scene: Object) -> void:
 	var away := _team_for_id(scene.get("teams"), away_id)
 	if home.is_empty() or away.is_empty():
 		return
+	var roster_state: Array = scene.get("roster_state")
+	var home_roster := RosterRules.roster_for_team(roster_state, home_id)
+	var away_roster := RosterRules.roster_for_team(roster_state, away_id)
+	home = FixtureSimulationRules.with_roster_context(home, home_roster)
+	away = FixtureSimulationRules.with_roster_context(away, away_roster)
 	var result := FixtureSimulationRules.simulate_fixture(home, away, round_no)
 	LeagueRules.record_result(
 		table,
