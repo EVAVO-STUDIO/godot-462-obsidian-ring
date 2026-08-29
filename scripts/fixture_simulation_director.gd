@@ -2,27 +2,34 @@ extends Node
 
 const LeagueRules = preload("res://scripts/league_rules.gd")
 const FixtureSimulationRules = preload("res://scripts/fixture_simulation_rules.gd")
+const RosterRules = preload("res://scripts/roster_rules.gd")
 const USER_TEAM_ID := "jaguar_house"
 
 var _scene_id := 0
 var _last_phase := -1
+var _last_match_number := -1
 
 func _process(_delta: float) -> void:
 	var scene := get_tree().current_scene
 	if scene == null or not _supports(scene):
 		return
 	var scene_id := scene.get_instance_id()
+	var match_number := int(scene.get("match_number"))
 	if scene_id != _scene_id:
 		_scene_id = scene_id
 		_last_phase = int(scene.get("phase"))
+		_last_match_number = match_number
 		return
+	if _last_match_number >= 0 and match_number != _last_match_number:
+		_recover_non_user_rosters(scene)
+		_last_match_number = match_number
 	var phase := int(scene.get("phase"))
 	if phase == 2 and _last_phase != 2:
 		_simulate_other_fixture(scene)
 	_last_phase = phase
 
 func _supports(scene: Object) -> bool:
-	var required := ["phase", "match_number", "fixture_rounds", "league_table", "league", "teams"]
+	var required := ["phase", "match_number", "fixture_rounds", "league_table", "league", "teams", "roster_state"]
 	var names: Dictionary = {}
 	for property in scene.get_property_list():
 		names[str(property.get("name", ""))] = true
@@ -30,6 +37,22 @@ func _supports(scene: Object) -> bool:
 		if not names.has(name):
 			return false
 	return true
+
+func _recover_non_user_rosters(scene: Object) -> void:
+	var rosters: Array = scene.get("roster_state")
+	var changed := false
+	for ri in range(rosters.size()):
+		var roster = rosters[ri]
+		if typeof(roster) != TYPE_DICTIONARY or str(roster.get("team_id", "")) == USER_TEAM_ID:
+			continue
+		var players: Array = roster.get("players", [])
+		for pi in range(players.size()):
+			players[pi] = RosterRules.recover_between_matches(players[pi])
+		roster["players"] = players
+		rosters[ri] = roster
+		changed = true
+	if changed:
+		scene.set("roster_state", rosters)
 
 func _simulate_other_fixture(scene: Object) -> void:
 	var round_no := maxi(1, int(scene.get("match_number")))
