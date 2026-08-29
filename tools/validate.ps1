@@ -138,7 +138,7 @@ foreach ($Token in @('static var _booking_threshold','static var _suspension_len
 $DisciplinePolicyText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_policy_director.gd')
 foreach ($Token in @('process_priority = -250','DisciplineRules.configure','booking_threshold','suspension_matches')) { if (-not $DisciplinePolicyText.Contains($Token)) { throw "Discipline policy director missing token: $Token" } }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration token: $Token" } }
+foreach ($Token in @('process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2','postseason_state','restore_postseason_state')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration token: $Token" } }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
 $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
@@ -174,11 +174,13 @@ foreach ($Token in @('process_priority = 60','MAX_EVENTS','last_home_actor_id','
 $SeasonEndRulesText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_rules.gd')
 foreach ($Token in @('user_qualified','terminal_reason','NO_PLAYOFF_BERTH','SEMIFINAL_EXIT')) { if (-not $SeasonEndRulesText.Contains($Token)) { throw "Season end rules missing token: $Token" } }
 $SeasonEndDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_end_director.gd')
-foreach ($Token in @('process_priority = -100','action_erase_events','_semifinal_winners','_champion_id','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing token: $Token" } }
+foreach ($Token in @('process_priority = -100','action_erase_events','postseason_state','director.call("postseason_state")','SeasonEndRules.terminal_reason')) { if (-not $SeasonEndDirectorText.Contains($Token)) { throw "Season end director missing public state token: $Token" } }
+foreach ($ForbiddenToken in @('get("_semifinal_winners")','get("_champion_id")')) { if ($SeasonEndDirectorText.Contains($ForbiddenToken)) { throw "Season end director still reads private postseason state: $ForbiddenToken" } }
 $ManagementRulesText = Get-Content -Raw (Join-Path $Root 'scripts/management_summary_rules.gd')
 foreach ($Token in @('player_line','foul_line','postseason_line')) { if (-not $ManagementRulesText.Contains($Token)) { throw "Management summary rules missing token: $Token" } }
 $ManagementDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/management_summary_director.gd')
-foreach ($Token in @('ManagementSummaryRules.player_line','FoulLedgerDirector','SeasonDirector','PanelContainer')) { if (-not $ManagementDirectorText.Contains($Token)) { throw "Management summary director missing token: $Token" } }
+foreach ($Token in @('ManagementSummaryRules.player_line','FoulLedgerDirector','SeasonDirector','PanelContainer','postseason_state','director.call("postseason_state")')) { if (-not $ManagementDirectorText.Contains($Token)) { throw "Management summary director missing token: $Token" } }
+foreach ($ForbiddenToken in @('get("_semifinal_winners")','get("_champion_id")')) { if ($ManagementDirectorText.Contains($ForbiddenToken)) { throw "Management summary still reads private postseason state: $ForbiddenToken" } }
 $StandingsRulesText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_rules.gd')
 foreach ($Token in @('sorted_rows','row_line','playoff_cutoff_line','marker')) { if (-not $StandingsRulesText.Contains($Token)) { throw "Standings summary rules missing token: $Token" } }
 $StandingsDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/standings_summary_director.gd')
@@ -186,7 +188,8 @@ foreach ($Token in @('StandingsSummaryRules.sorted_rows','StandingsSummaryRules.
 $RecoveryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/save_recovery_rules.gd')
 foreach ($Token in @('parse_supported_json','choose_primary_or_backup','source')) { if (-not $RecoveryRulesText.Contains($Token)) { throw "Season save recovery rules missing token: $Token" } }
 $SaveText = Get-Content -Raw (Join-Path $Root 'scripts/season_save.gd')
-foreach ($Token in @('SAVE_VERSION := 3','BACKUP_PATH','SaveRecoveryRules.choose_primary_or_backup','_backup_current_primary','RosterSaveRules.merge_rosters','_sanitize_table','_sanitize_rosters','_postseason_snapshot','_sanitize_postseason','_restore_postseason_deferred')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing canonical recovery-state token: $Token" } }
+foreach ($Token in @('SAVE_VERSION := 3','BACKUP_PATH','SaveRecoveryRules.choose_primary_or_backup','_backup_valid_primary','RosterSaveRules.merge_rosters','_sanitize_table','_sanitize_rosters','_postseason_snapshot','postseason_state','restore_postseason_state','_sanitize_postseason','_restore_postseason_deferred')) { if (-not $SaveText.Contains($Token)) { throw "Season save missing canonical recovery-state token: $Token" } }
+foreach ($ForbiddenToken in @('director.get("_semifinal_winners")','director.get("_champion_id")','director.set("_semifinal_winners"','director.set("_champion_id"')) { if ($SaveText.Contains($ForbiddenToken)) { throw "Season save still accesses private postseason state: $ForbiddenToken" } }
 
 $Godot = Resolve-Godot -Preferred $GodotBin
 if (-not $Godot) {
