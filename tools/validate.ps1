@@ -23,7 +23,7 @@ Write-Host 'Validating Obsidian Ring...' -ForegroundColor Cyan
 $Required = @(
     'project.godot','scenes/main.tscn','scripts/main.gd','scripts/content_catalog.gd',
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/roster_save_rules.gd',
-    'scripts/discipline_rules.gd','scripts/discipline_policy_director.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/save_recovery_rules.gd','scripts/season_director.gd',
+    'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/save_recovery_rules.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
     'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
@@ -36,8 +36,8 @@ $Required = @(
 foreach ($RelativePath in $Required) {
     if (-not (Test-Path (Join-Path $Root $RelativePath))) { throw "Missing required file: $RelativePath" }
 }
-foreach ($Forbidden in @('.github/workflows','.godot','build','dist')) {
-    if (Test-Path (Join-Path $Root $Forbidden)) { throw "Forbidden generated/paid-CI path committed: $Forbidden" }
+foreach ($Forbidden in @('.github/workflows','.godot','build','dist','scripts/discipline_policy_director.gd')) {
+    if (Test-Path (Join-Path $Root $Forbidden)) { throw "Forbidden generated/obsolete path committed: $Forbidden" }
 }
 
 $Teams = Get-Content -Raw (Join-Path $Root 'data/teams.json') | ConvertFrom-Json
@@ -124,7 +124,7 @@ if (@($Fixtures.rounds).Count -ne [int]$League.season_rounds) { throw 'Fixture r
 
 $ProjectText = Get-Content -Raw (Join-Path $Root 'project.godot')
 foreach ($Autoload in @(
-    'SeasonSave="*res://scripts/season_save.gd"','DisciplinePolicyDirector="*res://scripts/discipline_policy_director.gd"','SeasonDirector="*res://scripts/season_director.gd"',
+    'SeasonSave="*res://scripts/season_save.gd"','SeasonDirector="*res://scripts/season_director.gd"',
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
     'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"',
@@ -132,19 +132,20 @@ foreach ($Autoload in @(
     'SeasonEndDirector="*res://scripts/season_end_director.gd"','ManagementSummaryDirector="*res://scripts/management_summary_director.gd"',
     'StandingsSummaryDirector="*res://scripts/standings_summary_director.gd"'
 )) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
+if ($ProjectText.Contains('DisciplinePolicyDirector')) { throw 'Obsolete DisciplinePolicyDirector autoload must remain removed.' }
 
 $DisciplineRulesText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_rules.gd')
-foreach ($Token in @('static var _booking_threshold','static var _suspension_length','configure','booking_threshold_override','suspension_length_override','total - threshold')) { if (-not $DisciplineRulesText.Contains($Token)) { throw "Discipline rules missing config token: $Token" } }
-$DisciplinePolicyText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_policy_director.gd')
-foreach ($Token in @('process_priority = -250','DisciplineRules.configure','booking_threshold','suspension_matches')) { if (-not $DisciplinePolicyText.Contains($Token)) { throw "Discipline policy director missing token: $Token" } }
+foreach ($Token in @('DEFAULT_BOOKING_THRESHOLD := 3','DEFAULT_SUSPENSION_LENGTH := 1','booking_threshold_override','suspension_length_override','total - threshold')) { if (-not $DisciplineRulesText.Contains($Token)) { throw "Discipline rules missing source-owned policy token: $Token" } }
+foreach ($ForbiddenToken in @('static var _booking_threshold','static var _suspension_length','func configure(','func booking_threshold()','func suspension_length()')) { if ($DisciplineRulesText.Contains($ForbiddenToken)) { throw "Discipline rules still contain mutable shared policy state: $ForbiddenToken" } }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
 foreach ($Token in @(
-    'process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse',
+    'process_priority = 80','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse',
     'postseason_state','restore_postseason_state','LEGACY_SAVE_PATH','CANONICAL_SAVE_PATH','LEGACY_SAVE_VERSION','_load_legacy_state_if_needed',
-    'if FileAccess.file_exists(CANONICAL_SAVE_PATH):'
-)) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration-only token: $Token" } }
-foreach ($ForbiddenToken in @('func _save_state()','FileAccess.open(LEGACY_SAVE_PATH, FileAccess.WRITE)','SAVE_PATH := "user://obsidian_ring_postseason.json"')) {
-    if ($SeasonDirectorText.Contains($ForbiddenToken)) { throw "SeasonDirector still treats legacy postseason file as active persistence: $ForbiddenToken" }
+    'if FileAccess.file_exists(CANONICAL_SAVE_PATH):','league_cfg.get("booking_threshold", 3)','league_cfg.get("suspension_matches", 1)',
+    'DisciplineRules.apply_booking(player, points, booking_threshold, suspension_length)'
+)) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing direct discipline/migration token: $Token" } }
+foreach ($ForbiddenToken in @('func _save_state()','FileAccess.open(LEGACY_SAVE_PATH, FileAccess.WRITE)','SAVE_PATH := "user://obsidian_ring_postseason.json"','DisciplineRules.configure')) {
+    if ($SeasonDirectorText.Contains($ForbiddenToken)) { throw "SeasonDirector still contains obsolete persistence/policy behavior: $ForbiddenToken" }
 }
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
