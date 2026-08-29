@@ -10,6 +10,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	_test_default_policy()
 	_test_custom_policy()
+	_test_policy_ownership()
 	_test_foul_attribution()
 	_test_management_summary()
 	_test_standings_summary()
@@ -22,22 +23,36 @@ func _initialize() -> void:
 	quit(1)
 
 func _test_default_policy() -> void:
-	DisciplineRules.configure(3, 1)
+	_expect(DisciplineRules.DEFAULT_BOOKING_THRESHOLD == 3, "default booking threshold should remain three")
+	_expect(DisciplineRules.DEFAULT_SUSPENSION_LENGTH == 1, "default suspension should remain one match")
 	var booked := DisciplineRules.apply_booking({"booking_points":2,"suspension_matches":0,"suspensions_served":0}, 1)
 	_expect(int(booked.get("suspension_matches", 0)) == 1, "three booking points should trigger one-match default suspension")
 	_expect(int(booked.get("booking_points", 0)) == 0, "exact threshold should reset booking points to zero")
 
 func _test_custom_policy() -> void:
-	DisciplineRules.configure(4, 2)
-	_expect(DisciplineRules.booking_threshold() == 4, "configured booking threshold should be retained")
-	_expect(DisciplineRules.suspension_length() == 2, "configured suspension length should be retained")
-	var booked := DisciplineRules.apply_booking({"booking_points":3,"suspension_matches":0,"suspensions_served":0}, 2)
-	_expect(int(booked.get("suspension_matches", 0)) == 2, "custom policy should apply authored two-match suspension")
+	var booked := DisciplineRules.apply_booking({"booking_points":3,"suspension_matches":0,"suspensions_served":0}, 2, 4, 2)
+	_expect(int(booked.get("suspension_matches", 0)) == 2, "explicit authored policy should apply two-match suspension")
 	_expect(int(booked.get("booking_points", 0)) == 1, "booking points above threshold should carry forward instead of disappearing")
 	_expect(int(booked.get("suspensions_served", 0)) == 1, "triggered suspension should increment suspension history")
+	_expect(DisciplineRules.suspension_matches(3, 4, 2) == 0, "custom threshold should not suspend below threshold")
+	_expect(DisciplineRules.suspension_matches(4, 4, 2) == 2, "custom threshold should return authored suspension length")
 	var served := DisciplineRules.serve_round(booked)
 	_expect(int(served.get("suspension_matches", 0)) == 1, "serving one round should decrement multi-match suspension by one")
-	DisciplineRules.configure(3, 1)
+
+func _test_policy_ownership() -> void:
+	var project := FileAccess.open("res://project.godot", FileAccess.READ)
+	_expect(project != null, "project.godot should be readable for discipline ownership check")
+	if project != null:
+		var text := project.get_as_text()
+		_expect(not text.contains("DisciplinePolicyDirector"), "obsolete discipline policy autoload must remain removed")
+	_expect(not FileAccess.file_exists("res://scripts/discipline_policy_director.gd"), "obsolete discipline policy director file must remain deleted")
+	var season_file := FileAccess.open("res://scripts/season_director.gd", FileAccess.READ)
+	_expect(season_file != null, "season_director.gd should be readable for direct policy check")
+	if season_file != null:
+		var source := season_file.get_as_text()
+		_expect(source.contains('league_cfg.get("booking_threshold", 3)'), "SeasonDirector should read booking threshold at booking source")
+		_expect(source.contains('league_cfg.get("suspension_matches", 1)'), "SeasonDirector should read suspension length at booking source")
+		_expect(source.contains("DisciplineRules.apply_booking(player, points, booking_threshold, suspension_length)"), "SeasonDirector should pass explicit policy into booking rule")
 
 func _test_foul_attribution() -> void:
 	var home_players := [
