@@ -3,6 +3,7 @@ extends Node
 const LeagueRules = preload("res://scripts/league_rules.gd")
 const FixtureSimulationRules = preload("res://scripts/fixture_simulation_rules.gd")
 const RosterRules = preload("res://scripts/roster_rules.gd")
+const ConditionRules = preload("res://scripts/condition_rules.gd")
 const USER_TEAM_ID := "jaguar_house"
 
 var _scene_id := 0
@@ -47,7 +48,9 @@ func _recover_non_user_rosters(scene: Object) -> void:
 			continue
 		var players: Array = roster.get("players", [])
 		for pi in range(players.size()):
-			players[pi] = RosterRules.recover_between_matches(players[pi])
+			var player: Dictionary = RosterRules.recover_between_matches(players[pi])
+			player["fatigue_carry"] = ConditionRules.recover_bench_carry(int(player.get("fatigue_carry", 0)))
+			players[pi] = player
 		roster["players"] = players
 		rosters[ri] = roster
 		changed = true
