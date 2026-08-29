@@ -10,6 +10,7 @@ func _initialize() -> void:
 	_test_canonical_roster_merge()
 	_test_participant_accumulation()
 	_test_substituted_injury_persistence()
+	_test_match_long_injury_ledger()
 	_test_condition_fatigue_order()
 	_test_save_recovery()
 	if failures.is_empty():
@@ -64,11 +65,22 @@ func _test_substituted_injury_persistence() -> void:
 	_expect(source.contains('var injury_seconds := float(outgoing.get("injured", 0.0))'), "outgoing injury persistence should use the live injury timer")
 	_expect(source.contains("clampi(int(ceil(injury_seconds / 6.0)), 1, 3)"), "substitution injury conversion should match the result-path 1-3 match rule")
 	_expect(source.contains('maxi(int(spec.get("injury_matches", 0)), injury_matches)'), "substitution persistence must never shorten an existing injury")
+
+func _test_match_long_injury_ledger() -> void:
+	var condition_file := FileAccess.open("res://scripts/condition_director.gd", FileAccess.READ)
+	_expect(condition_file != null, "condition director should be readable for injury ledger checks")
+	if condition_file == null:
+		return
+	var source := condition_file.get_as_text()
+	_expect(source.contains("var _injury_seconds_by_id: Dictionary = {}"), "condition director should retain a match-long injury severity ledger")
+	_expect(source.contains("_capture_user_injuries(scene.get(\"home_players\"))"), "user injuries should be sampled continuously while players are active")
+	_expect(source.contains('if injury_seconds > float(_injury_seconds_by_id.get(id, 0.0))'), "injury ledger should retain the maximum observed severity rather than the countdown remainder")
+	_expect(source.contains('var injury_matches := clampi(int(ceil(injury_seconds / 6.0)), 1, 3)'), "ledger should convert maximum injury severity to the canonical 1-3 match scale")
+	_expect(source.contains('spec["injury_matches"] = maxi(int(spec.get("injury_matches", 0)), injury_matches)'), "ledger persistence must never shorten an existing career injury")
 	var main_file := FileAccess.open("res://scripts/main.gd", FileAccess.READ)
-	_expect(main_file != null, "main.gd should remain readable for final-active injury persistence")
+	_expect(main_file != null, "main.gd should remain readable for final-active injury fallback")
 	if main_file != null:
-		var main_source := main_file.get_as_text()
-		_expect(main_source.contains("_persist_match_injuries()"), "final on-court injuries should still persist at match result")
+		_expect(main_file.get_as_text().contains("_persist_match_injuries()"), "final on-court injury persistence should remain as a compatible fallback")
 
 func _test_condition_fatigue_order() -> void:
 	var condition_file := FileAccess.open("res://scripts/condition_director.gd", FileAccess.READ)
