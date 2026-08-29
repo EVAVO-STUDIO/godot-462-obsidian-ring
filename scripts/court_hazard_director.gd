@@ -1,8 +1,6 @@
 extends Node
 
 const CourtHazardRules = preload("res://scripts/court_hazard_rules.gd")
-const COURT_TOP := 62.0
-const COURT_BOTTOM := 312.0
 
 func _ready() -> void:
 	process_priority = 120
@@ -21,7 +19,7 @@ func _process(delta: float) -> void:
 	_apply_narrow_sidelines(scene, court)
 
 func _supports(scene: Object) -> bool:
-	var required := ["phase", "teams", "courts", "fixture_home_id", "wall_rebound", "ball_velocity", "possession_team", "home_players", "away_players"]
+	var required := ["phase", "teams", "courts", "fixture_home_id", "court_rect", "wall_rebound", "ball_velocity", "possession_team", "home_players", "away_players"]
 	var names: Dictionary = {}
 	for property in scene.get_property_list():
 		names[str(property.get("name", ""))] = true
@@ -60,12 +58,13 @@ func _apply_narrow_sidelines(scene: Object, court: Dictionary) -> void:
 	var margin := CourtHazardRules.vertical_margin(court)
 	if margin <= 12.0:
 		return
+	var rect: Rect2 = scene.get("court_rect")
 	for property_name in ["home_players", "away_players"]:
 		var players: Array = scene.get(property_name)
 		for i in range(players.size()):
 			var player: Dictionary = players[i]
-			var position: Vector2 = player.get("position", Vector2.ZERO)
-			position.y = clampf(position.y, COURT_TOP + margin, COURT_BOTTOM - margin)
+			var position: Vector2 = player.get("position", rect.get_center())
+			position.y = clampf(position.y, rect.position.y + margin, rect.end.y - margin)
 			player["position"] = position
 			players[i] = player
 		scene.set(property_name, players)
