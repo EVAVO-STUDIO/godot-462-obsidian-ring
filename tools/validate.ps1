@@ -138,7 +138,14 @@ foreach ($Token in @('static var _booking_threshold','static var _suspension_len
 $DisciplinePolicyText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_policy_director.gd')
 foreach ($Token in @('process_priority = -250','DisciplineRules.configure','booking_threshold','suspension_matches')) { if (-not $DisciplinePolicyText.Contains($Token)) { throw "Discipline policy director missing token: $Token" } }
 $SeasonDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/season_director.gd')
-foreach ($Token in @('process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse','SAVE_VERSION := 2','postseason_state','restore_postseason_state')) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration token: $Token" } }
+foreach ($Token in @(
+    'process_priority = 80','DisciplineRules.apply_booking','FoulLedgerDirector','PlayoffRules.semifinal_pairings','championship_purse',
+    'postseason_state','restore_postseason_state','LEGACY_SAVE_PATH','CANONICAL_SAVE_PATH','LEGACY_SAVE_VERSION','_load_legacy_state_if_needed',
+    'if FileAccess.file_exists(CANONICAL_SAVE_PATH):'
+)) { if (-not $SeasonDirectorText.Contains($Token)) { throw "SeasonDirector missing integration/migration-only token: $Token" } }
+foreach ($ForbiddenToken in @('func _save_state()','FileAccess.open(LEGACY_SAVE_PATH, FileAccess.WRITE)','SAVE_PATH := "user://obsidian_ring_postseason.json"')) {
+    if ($SeasonDirectorText.Contains($ForbiddenToken)) { throw "SeasonDirector still treats legacy postseason file as active persistence: $ForbiddenToken" }
+}
 $SubText = Get-Content -Raw (Join-Path $Root 'scripts/match_substitution_director.gd')
 foreach ($Token in @('KEY_V','SUBSTITUTIONS_PER_MATCH','request_emergency_substitution','RosterRules.best_substitute_candidate')) { if (-not $SubText.Contains($Token)) { throw "Match substitution director missing token: $Token" } }
 $RosterText = Get-Content -Raw (Join-Path $Root 'scripts/roster_rules.gd')
