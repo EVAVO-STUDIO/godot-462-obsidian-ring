@@ -38,12 +38,11 @@ The canonical season save maintains a validated backup. Restore prefers valid pr
 
 - Stamina is captured by player ID throughout PLAYING, so a substituted-out participant retains the last real stamina observed before leaving the court.
 - Players who never appeared receive bench recovery; players who appeared receive fatigue carry from their actual final observed stamina.
-- Injury severity is also captured continuously by player ID.
-- The injury ledger stores the **maximum injury timer observed during the match**, not the timer remaining at the final whistle. An early injury therefore cannot disappear merely because its temporary on-court stun counted back to zero before RESULT.
-- Both home and away participants feed the injury ledger, so AI clubs do not receive hidden immunity from season attrition.
-- At RESULT, the maximum observed injury is converted to the canonical 1–3 match injury scale and merged with `max(existing, new)` so persistence never shortens an existing injury.
+- Injury severity is captured continuously by player ID for **both teams**.
+- The injury ledger stores the maximum injury timer observed during the match, not the timer remaining at the final whistle. An early injury therefore cannot disappear merely because its temporary on-court stun counted back to zero before RESULT.
+- At RESULT, maximum observed injury converts to the canonical 1–3 match injury scale and merges with `max(existing, new)` so persistence never shortens an existing injury.
 
-`MatchSubstitutionDirector` also persists an outgoing user player's current injury **before** replacing that runtime dictionary. This closes the separate case where an injured player leaves the live `home_players` array before RESULT.
+`MatchSubstitutionDirector` also persists an outgoing Jaguar House player's current injury **before** replacing that runtime dictionary. This closes the separate case where an injured user player leaves the live `home_players` array before RESULT.
 
 The existing `main.gd::_persist_match_injuries()` remains as a compatible final-active-player fallback; the match-long ledger is the completeness layer that covers recovered and substituted participants.
 
@@ -61,11 +60,24 @@ The reference `COURT` rectangle is only a scaling baseline. Each fixture resolve
 
 That rectangle drives formations, player clamps, AI lanes, ball wall collisions, ring positions, wall-scoring apertures, ball reset position and rendering. `CourtHazardDirector` may refine that live geometry for low friction, fast walls and narrow sidelines but must not introduce fixed replacement bounds.
 
-## League integrity
+## League integrity and AI club condition
 
-Regular-season AI fixtures are deterministic and recorded through the same league-result rules as the user fixture. The ten-round schedule remains balanced at five home and five away matches per club. Replay matches are exhibition-only and cannot mutate committed career state.
+Regular-season AI fixtures remain deterministic and use the same league-result rules as the user fixture. The ten-round schedule remains balanced at five home and five away matches per club. Replay matches are exhibition-only and cannot mutate committed career state.
 
-Non-user fixture simulation occurs on first RESULT entry while `match_number` still identifies the completed round; round advancement occurs only after the player continues.
+AI-vs-AI simulation now consumes the same canonical roster state that drives live matches:
+
+- `FixtureSimulationDirector` resolves each simulated club through `RosterRules.roster_for_team()`.
+- `FixtureSimulationRules.roster_strength_modifier()` excludes injured and suspended players from the eligible pool.
+- Available-player skill contributes a bounded positive/negative modifier.
+- Persistent fatigue reduces that modifier.
+- A fully unavailable roster reaches a bounded `-12` floor rather than producing invalid scores.
+- The roster modifier is deliberately smaller than the club's authored attack/defence/speed identity, so attrition matters without erasing team character.
+
+This means injuries, suspensions and fatigue now matter to clubs even when they play each other off-screen.
+
+Non-user fixture simulation occurs on first RESULT entry while `match_number` still identifies the completed round. Round advancement occurs only after the player continues.
+
+Because AI injuries are now real career state, non-user rosters also recover at the same season boundary. `FixtureSimulationDirector` detects `match_number` advancement and runs `RosterRules.recover_between_matches()` across every non-user roster exactly once. Jaguar House is skipped there because `main.gd::_advance_between_matches()` remains the user-team recovery owner.
 
 ## Refactor direction
 
@@ -78,7 +90,9 @@ Keep one authoritative owner for each persistent or simulation concept, with pub
 - Court hazards refine live geometry and never hard-code replacement bounds.
 - Match participation is tracked by player ID across substitutions.
 - Match-long injury persistence uses maximum observed severity and applies symmetrically to both teams.
-- Live substitution persists outgoing injury state before replacement.
+- Live substitution persists outgoing user injury state before replacement.
+- AI fixtures consume canonical roster availability/skill/fatigue rather than static team ratings alone.
+- AI roster recovery runs exactly once on round advancement and skips Jaguar House.
 - Stamina is clamped and contact actions respect cooldown/cost rules.
 - Discipline thresholds/suspension length come directly from authored league config.
 - Saved rosters cannot delete authored players or replace canonical identity/role data.
