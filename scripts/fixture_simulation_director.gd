@@ -105,10 +105,24 @@ func _simulate_other_fixture(scene: Object) -> void:
 		int(league_cfg.get("draw_points", 1))
 	)
 	scene.set("league_table", table)
+	_apply_fixture_wear(scene, home_id, away_id, round_no)
 	if _has_property(scene, "status_text"):
 		scene.set("status_text", "%s %d-%d %s" % [str(home.get("name", home_id)).to_upper(), int(result["home_score"]), int(result["away_score"]), str(away.get("name", away_id)).to_upper()])
 	if _has_property(scene, "status_timer"):
 		scene.set("status_timer", 2.5)
+
+func _apply_fixture_wear(scene: Object, home_id: String, away_id: String, round_no: int) -> void:
+	var rosters: Array = scene.get("roster_state")
+	for ri in range(rosters.size()):
+		var roster = rosters[ri]
+		if typeof(roster) != TYPE_DICTIONARY:
+			continue
+		var team_id := str(roster.get("team_id", ""))
+		if team_id == home_id:
+			rosters[ri] = FixtureSimulationRules.simulate_roster_wear(roster, away_id, round_no, true)
+		elif team_id == away_id:
+			rosters[ri] = FixtureSimulationRules.simulate_roster_wear(roster, home_id, round_no, false)
+	scene.set("roster_state", rosters)
 
 func _team_for_id(teams: Array, id: String) -> Dictionary:
 	for team in teams:
