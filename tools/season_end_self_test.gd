@@ -23,6 +23,7 @@ func _initialize() -> void:
 		{"id":"jaguar_house","points":2,"for":8,"against":29}
 	]
 	_expect(SeasonEndRules.terminal_reason(11, 10, short_table, 4, [], "") == "NO_PLAYOFF_BERTH", "non-qualifier should stop before semifinal")
+	_test_postseason_api_boundary()
 	if failures.is_empty():
 		print("Obsidian Ring season-end self-test passed.")
 		quit(0)
@@ -30,6 +31,16 @@ func _initialize() -> void:
 	for failure in failures:
 		push_error(failure)
 	quit(1)
+
+func _test_postseason_api_boundary() -> void:
+	var file := FileAccess.open("res://scripts/season_end_director.gd", FileAccess.READ)
+	_expect(file != null, "season_end_director.gd should be readable")
+	if file == null:
+		return
+	var source := file.get_as_text()
+	_expect(source.contains('has_method("postseason_state")') and source.contains('director.call("postseason_state")'), "season end flow should consume public postseason state API")
+	_expect(not source.contains('get("_semifinal_winners")'), "season end flow must not read private semifinal state")
+	_expect(not source.contains('get("_champion_id")'), "season end flow must not read private champion state")
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:
