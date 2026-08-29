@@ -84,6 +84,7 @@ func _substitute_player(scene: Object, active_index: int, emergency: bool) -> bo
 			_set_status(scene, "NO ELIGIBLE SUBSTITUTE")
 		return false
 
+	_persist_outgoing_injury(scene, outgoing)
 	var position: Vector2 = outgoing.get("position", Vector2(205, 190))
 	var team: Dictionary = scene.call("_team_for_id", str(scene.get("home_team_id")))
 	var replacement: Dictionary = scene.call("_make_player", position, candidate, team)
@@ -95,6 +96,31 @@ func _substitute_player(scene: Object, active_index: int, emergency: bool) -> bo
 	var prefix := "AUTO SUB" if emergency else "SUB"
 	_set_status(scene, "%s %s FOR %s  %d LEFT" % [prefix, str(candidate.get("name", "PLAYER")).to_upper(), str(outgoing.get("name", "PLAYER")).to_upper(), _remaining])
 	return true
+
+func _persist_outgoing_injury(scene: Object, outgoing: Dictionary) -> void:
+	var injury_seconds := float(outgoing.get("injured", 0.0))
+	if injury_seconds <= 0.0:
+		return
+	var player_id := str(outgoing.get("id", ""))
+	if player_id == "":
+		return
+	var injury_matches := clampi(int(ceil(injury_seconds / 6.0)), 1, 3)
+	var rosters: Array = scene.get("roster_state")
+	for ri in range(rosters.size()):
+		var roster = rosters[ri]
+		if typeof(roster) != TYPE_DICTIONARY or str(roster.get("team_id", "")) != USER_TEAM_ID:
+			continue
+		var players: Array = roster.get("players", [])
+		for pi in range(players.size()):
+			var spec = players[pi]
+			if typeof(spec) != TYPE_DICTIONARY or str(spec.get("id", "")) != player_id:
+				continue
+			spec["injury_matches"] = maxi(int(spec.get("injury_matches", 0)), injury_matches)
+			players[pi] = spec
+			roster["players"] = players
+			rosters[ri] = roster
+			scene.set("roster_state", rosters)
+			return
 
 func remaining_substitutions() -> int:
 	return _remaining
