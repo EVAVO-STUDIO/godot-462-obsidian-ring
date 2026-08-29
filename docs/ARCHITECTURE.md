@@ -2,10 +2,10 @@
 
 ## Current layers
 
-- `main.gd` owns high-level game flow, temporary rendering and match orchestration.
+- `main.gd` owns high-level game flow, temporary rendering, match orchestration and the live court geometry used by athletes, AI, ball physics, scoring and drawing.
 - `content_catalog.gd` owns JSON loading and content access helpers.
 - `match_rules.gd`, `league_rules.gd`, `roster_rules.gd`, `playoff_rules.gd` and the other `*_rules.gd` files own pure deterministic calculations.
-- Runtime directors handle narrowly scoped orchestration such as substitutions, fatigue, court effects, AI fixture simulation, replay protection, foul attribution and presentation rails.
+- Runtime directors handle narrowly scoped orchestration such as substitutions, fatigue, court hazards, AI fixture simulation, replay protection, foul attribution and presentation rails.
 - `SeasonDirector` owns live discipline consequences and postseason progression, and exposes postseason state through the public `postseason_state()` / `restore_postseason_state()` API.
 - `SeasonSave` is the single canonical career persistence boundary.
 - `data/` owns fictional teams, rulesets, courts, rosters, fixtures and league/career definitions.
@@ -60,19 +60,42 @@ Discipline policy is owned at the booking source rather than by mutable shared s
 
 This means process priority cannot change which discipline policy a foul uses.
 
+## Court geometry ownership
+
+The reference `COURT` rectangle in `main.gd` is only the scaling baseline. Each fixture resolves the venue's authored court data into one live `court_rect` through `CourtGeometryRules.movement_rect()`.
+
+That same `court_rect` drives:
+
+- initial and reset player formations
+- controlled-player clamps
+- AI support and attack lanes
+- ball wall collisions
+- ring positions
+- wall-scoring apertures
+- ball reset position
+- live court rendering
+
+The earlier `CourtGeometryDirector` post-frame player-clamp layer has been removed. Court dimensions are no longer a presentation/player-only modifier; authored width and height affect the whole match geometry at the source.
+
+`CourtHazardDirector` remains a focused modifier for court-specific effects such as low friction, fast walls and narrow sidelines. Hazards refine the live `court_rect`; they must not introduce fixed world-space court bounds of their own.
+
 ## League integrity
 
 Regular-season AI fixtures use deterministic simulation and are recorded through the same league result rules as the user fixture. The ten-round schedule is balanced at five home and five away matches per club. Replay matches are exhibition-only and cannot mutate committed career state.
 
+The non-user fixture is simulated on first entry into RESULT while `match_number` still identifies the completed round. Round advancement occurs only after the player continues from the result screen, so AI results cannot drift to the next fixture round.
+
 ## Refactor direction
 
-Continue reducing private cross-director coupling and duplicate state. Keep one authoritative owner for each persistent concept, with public read/restore contracts where another subsystem genuinely needs access.
+Continue reducing private cross-director coupling and duplicate state. Keep one authoritative owner for each persistent or simulation concept, with public contracts where another subsystem genuinely needs access.
 
-Longer-term candidates include moving more ball/scoring court geometry to authored data and consolidating presentation-only directors where that reduces complexity without mixing UI and simulation.
+Presentation-only directors can remain separate where that keeps UI concerns out of simulation. Runtime directors that only repair or reinterpret state after the scene has already made a decision remain candidates for source integration.
 
 ## Invariants
 
 - A scoring event resolves exactly once before rebound processing.
+- One live `court_rect` drives athletes, AI, ball bounds, scoring geometry, resets and court rendering.
+- Court hazards refine live geometry and never hard-code replacement court bounds.
 - Stamina is clamped and contact actions respect cooldown/cost rules.
 - Discipline thresholds/suspension length are passed explicitly from authored league config at booking time.
 - Fictional arcade rules remain clearly separate from historical claims.
