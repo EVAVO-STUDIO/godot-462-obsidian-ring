@@ -22,11 +22,12 @@ func _initialize() -> void:
 	var sunken_rect := CourtGeometryRules.movement_rect(BASE_COURT, sunken)
 	var temple_rect := CourtGeometryRules.movement_rect(BASE_COURT, temple)
 	var gate_rect := CourtGeometryRules.movement_rect(BASE_COURT, gate)
-	_expect(temple_rect.size.x > sunken_rect.size.x, "wider authored court should produce wider player movement space")
-	_expect(gate_rect.size.y < sunken_rect.size.y, "shorter authored court should produce tighter vertical movement space")
+	_expect(temple_rect.size.x > sunken_rect.size.x, "wider authored court should produce wider live court geometry")
+	_expect(gate_rect.size.y < sunken_rect.size.y, "shorter authored court should produce tighter vertical geometry")
 	var outside := Vector2(0, 0)
 	var clamped := CourtGeometryRules.clamp_player(outside, gate_rect)
 	_expect(gate_rect.has_point(clamped), "court geometry should clamp players into movement space")
+	_test_source_owned_geometry()
 	if failures.is_empty():
 		print("Obsidian Ring court hazard/geometry self-test passed.")
 		quit(0)
@@ -34,6 +35,28 @@ func _initialize() -> void:
 	for failure in failures:
 		push_error(failure)
 	quit(1)
+
+func _test_source_owned_geometry() -> void:
+	var main_file := FileAccess.open("res://scripts/main.gd", FileAccess.READ)
+	_expect(main_file != null, "main.gd should be readable for court geometry ownership checks")
+	if main_file != null:
+		var source := main_file.get_as_text()
+		_expect(source.contains("const CourtGeometryRules = preload"), "main should consume shared court geometry rules")
+		_expect(source.contains("var court_rect := COURT"), "main should own one live court rectangle")
+		_expect(source.contains("court_rect = CourtGeometryRules.movement_rect(COURT, court)"), "venue selection should derive live court geometry from authored dimensions")
+		_expect(source.contains("TeamPlayRules.support_target(i,home,court_rect)"), "AI support lanes should use live court geometry")
+		_expect(source.contains("CourtGeometryRules.clamp_player(point,court_rect,12.0)"), "player clamp should use live court geometry")
+		_expect(source.contains("ball_position=court_rect.get_center()"), "ball reset should use live court center")
+		_expect(source.contains("ball_position.x<court_rect.position.x+BALL_RADIUS"), "ball wall collisions should use live court bounds")
+		_expect(source.contains("Vector2(court_rect.position.x+18,court_rect.get_center().y)"), "ring positions should use live court geometry")
+		_expect(source.contains("court_rect.size.y*0.192"), "wall scoring aperture should scale with live court height")
+		_expect(source.contains("draw_rect(court_rect"), "rendering should use the same live court rectangle")
+		_expect(source.contains("_formation_positions(true)") and source.contains("_formation_positions(false)"), "formations should derive from live court geometry")
+	var project := FileAccess.open("res://project.godot", FileAccess.READ)
+	_expect(project != null, "project.godot should be readable for geometry autoload checks")
+	if project != null:
+		_expect(not project.get_as_text().contains("CourtGeometryDirector"), "court geometry reconciliation autoload should stay removed")
+	_expect(not FileAccess.file_exists("res://scripts/court_geometry_director.gd"), "obsolete court geometry director should remain deleted")
 
 func _court(courts: Array, id: String) -> Dictionary:
 	for court in courts:
