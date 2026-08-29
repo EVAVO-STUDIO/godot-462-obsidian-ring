@@ -9,6 +9,7 @@ var failures: Array[String] = []
 func _initialize() -> void:
 	_test_canonical_roster_merge()
 	_test_participant_accumulation()
+	_test_condition_fatigue_order()
 	_test_save_recovery()
 	if failures.is_empty():
 		print("Obsidian Ring persistence self-test passed.")
@@ -51,6 +52,18 @@ func _test_participant_accumulation() -> void:
 	_expect(absf(float(captured["starter"]) - 31.0) < 0.001, "substituted-out participant should retain last observed stamina")
 	_expect(absf(float(captured["other"]) - 64.0) < 0.001, "active participant stamina should update to latest observation")
 	_expect(ConditionRules.carry_from_end_stamina(float(captured["starter"])) > 0, "tired substituted-out participant should receive fatigue carry rather than bench recovery")
+
+func _test_condition_fatigue_order() -> void:
+	var condition_file := FileAccess.open("res://scripts/condition_director.gd", FileAccess.READ)
+	var fatigue_file := FileAccess.open("res://scripts/fatigue_director.gd", FileAccess.READ)
+	_expect(condition_file != null and fatigue_file != null, "condition and fatigue directors should be readable for process-order checks")
+	if condition_file == null or fatigue_file == null:
+		return
+	var condition_source := condition_file.get_as_text()
+	var fatigue_source := fatigue_file.get_as_text()
+	_expect(condition_source.contains("process_priority = 150"), "condition should apply carried starting stamina before fatigue performance")
+	_expect(fatigue_source.contains("process_priority = 170"), "fatigue should derive performance after condition state is applied")
+	_expect(fatigue_source.contains("ConditionDirector runs at 150"), "fatigue ordering should remain intentional and documented in source")
 
 func _test_save_recovery() -> void:
 	var primary := JSON.stringify({"version":3,"funds":4200})
