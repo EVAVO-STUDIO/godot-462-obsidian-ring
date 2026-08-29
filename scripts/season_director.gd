@@ -117,6 +117,9 @@ func _nearest_away_tackler_index(scene: Object, players: Array) -> int:
 func _apply_booking_to_roster(scene: Object, player_id: String, points: int) -> void:
 	if player_id == "":
 		return
+	var league_cfg := _league_config(scene)
+	var booking_threshold := maxi(1, int(league_cfg.get("booking_threshold", 3)))
+	var suspension_length := maxi(1, int(league_cfg.get("suspension_matches", 1)))
 	var rosters: Array = scene.get("roster_state")
 	for ri in range(rosters.size()):
 		var roster: Dictionary = rosters[ri]
@@ -126,7 +129,7 @@ func _apply_booking_to_roster(scene: Object, player_id: String, points: int) -> 
 			if str(player.get("id", "")) != player_id:
 				continue
 			var before_suspension := int(player.get("suspension_matches", 0))
-			player = DisciplineRules.apply_booking(player, points)
+			player = DisciplineRules.apply_booking(player, points, booking_threshold, suspension_length)
 			if int(player.get("suspension_matches", 0)) > before_suspension:
 				player["suspension_until_round"] = int(scene.get("match_number")) + 1
 			players[pi] = player
