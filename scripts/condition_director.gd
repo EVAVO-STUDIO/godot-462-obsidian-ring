@@ -1,10 +1,12 @@
 extends Node
 
 const ConditionRules = preload("res://scripts/condition_rules.gd")
+const USER_TEAM_ID := "jaguar_house"
 
 var _scene_id := 0
 var _last_phase := -1
 var _played_stamina_by_id: Dictionary = {}
+var _injury_seconds_by_id: Dictionary = {}
 
 func _ready() -> void:
 	process_priority = 150
@@ -19,10 +21,12 @@ func _process(_delta: float) -> void:
 		_scene_id = scene_id
 		_last_phase = phase
 		_played_stamina_by_id.clear()
+		_injury_seconds_by_id.clear()
 		return
 
 	if phase == 1 and _last_phase != 1:
 		_played_stamina_by_id.clear()
+		_injury_seconds_by_id.clear()
 		_apply_starting_condition(scene)
 		_capture_participants(scene)
 	elif phase == 1:
@@ -58,6 +62,18 @@ func _apply_team_start(scene: Object, property_name: String) -> void:
 func _capture_participants(scene: Object) -> void:
 	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("home_players"))
 	_played_stamina_by_id = ConditionRules.capture_stamina(_played_stamina_by_id, scene.get("away_players"))
+	_capture_user_injuries(scene.get("home_players"))
+
+func _capture_user_injuries(players: Array) -> void:
+	for player in players:
+		if typeof(player) != TYPE_DICTIONARY:
+			continue
+		var id := str(player.get("id", ""))
+		if id == "":
+			continue
+		var injury_seconds := maxf(0.0, float(player.get("injured", 0.0)))
+		if injury_seconds > float(_injury_seconds_by_id.get(id, 0.0)):
+			_injury_seconds_by_id[id] = injury_seconds
 
 func _capture_end_condition(scene: Object) -> void:
 	_capture_participants(scene)
@@ -65,6 +81,7 @@ func _capture_end_condition(scene: Object) -> void:
 	for ri in range(rosters.size()):
 		var roster: Dictionary = rosters[ri]
 		var players: Array = roster.get("players", [])
+		var is_user_roster := str(roster.get("team_id", "")) == USER_TEAM_ID
 		for pi in range(players.size()):
 			var spec: Dictionary = players[pi]
 			var id := str(spec.get("id", ""))
@@ -72,6 +89,11 @@ func _capture_end_condition(scene: Object) -> void:
 				spec["fatigue_carry"] = ConditionRules.carry_from_end_stamina(float(_played_stamina_by_id[id]))
 			else:
 				spec["fatigue_carry"] = ConditionRules.recover_bench_carry(int(spec.get("fatigue_carry", 0)))
+			if is_user_roster and _injury_seconds_by_id.has(id):
+				var injury_seconds := float(_injury_seconds_by_id[id])
+				if injury_seconds > 0.0:
+					var injury_matches := clampi(int(ceil(injury_seconds / 6.0)), 1, 3)
+					spec["injury_matches"] = maxi(int(spec.get("injury_matches", 0)), injury_matches)
 			players[pi] = spec
 		roster["players"] = players
 		rosters[ri] = roster
