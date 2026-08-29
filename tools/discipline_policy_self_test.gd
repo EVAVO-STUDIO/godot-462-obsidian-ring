@@ -68,6 +68,13 @@ func _test_management_summary() -> void:
 		var text := project.get_as_text()
 		_expect(text.contains("ManagementSummaryDirector=\"*res://scripts/management_summary_director.gd\""), "management summary director must remain autoloaded")
 		_expect(text.contains("StandingsSummaryDirector=\"*res://scripts/standings_summary_director.gd\""), "standings summary director must remain autoloaded")
+	var manager_file := FileAccess.open("res://scripts/management_summary_director.gd", FileAccess.READ)
+	_expect(manager_file != null, "management_summary_director.gd should be readable")
+	if manager_file != null:
+		var source := manager_file.get_as_text()
+		_expect(source.contains('has_method("postseason_state")') and source.contains('director.call("postseason_state")'), "management summary should consume public postseason state API")
+		_expect(not source.contains('get("_semifinal_winners")'), "management summary must not read private semifinal state")
+		_expect(not source.contains('get("_champion_id")'), "management summary must not read private champion state")
 
 func _test_standings_summary() -> void:
 	var table := [
