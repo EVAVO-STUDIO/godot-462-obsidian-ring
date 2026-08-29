@@ -103,7 +103,9 @@ func _test_ai_roster_recovery_boundary() -> void:
 	_expect(source.contains("if _last_match_number >= 0 and match_number != _last_match_number:"), "AI recovery should occur only when the round number advances")
 	_expect(source.contains("_recover_non_user_rosters(scene)"), "round advancement should recover non-user rosters")
 	_expect(source.contains('str(roster.get("team_id", "")) == USER_TEAM_ID'), "AI recovery must explicitly skip Jaguar House because main owns user recovery")
-	_expect(source.contains("RosterRules.recover_between_matches(players[pi])"), "AI recovery should use the same canonical recovery rule as user management")
+	_expect(source.contains("RosterRules.recover_between_matches(players[pi])"), "AI recovery should use the same canonical injury recovery rule as user management")
+	_expect(source.contains("ConditionRules.recover_bench_carry"), "AI round recovery should reduce stale fatigue carry")
+	_expect(source.contains('player["fatigue_carry"] = ConditionRules.recover_bench_carry'), "AI fatigue recovery should persist back to canonical roster state")
 	_expect(source.contains("_last_match_number = match_number"), "AI recovery boundary must update its round marker to remain idempotent")
 
 func _expect(condition: bool, message: String) -> void:
