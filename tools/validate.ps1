@@ -25,7 +25,7 @@ $Required = @(
     'scripts/match_rules.gd','scripts/team_play_rules.gd','scripts/league_rules.gd','scripts/roster_rules.gd','scripts/roster_save_rules.gd',
     'scripts/discipline_rules.gd','scripts/playoff_rules.gd','scripts/season_save.gd','scripts/save_recovery_rules.gd','scripts/season_director.gd',
     'scripts/match_substitution_director.gd','scripts/condition_rules.gd','scripts/condition_director.gd','scripts/fatigue_director.gd',
-    'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd','scripts/court_geometry_director.gd',
+    'scripts/court_hazard_rules.gd','scripts/court_hazard_director.gd','scripts/court_geometry_rules.gd',
     'scripts/fixture_simulation_rules.gd','scripts/fixture_simulation_director.gd',
     'scripts/replay_guard_rules.gd','scripts/replay_guard_director.gd','scripts/season_end_rules.gd','scripts/season_end_director.gd',
     'scripts/foul_ledger_rules.gd','scripts/foul_ledger_director.gd','scripts/management_summary_rules.gd','scripts/management_summary_director.gd','scripts/standings_summary_rules.gd','scripts/standings_summary_director.gd',
@@ -36,7 +36,7 @@ $Required = @(
 foreach ($RelativePath in $Required) {
     if (-not (Test-Path (Join-Path $Root $RelativePath))) { throw "Missing required file: $RelativePath" }
 }
-foreach ($Forbidden in @('.github/workflows','.godot','build','dist','scripts/discipline_policy_director.gd')) {
+foreach ($Forbidden in @('.github/workflows','.godot','build','dist','scripts/discipline_policy_director.gd','scripts/court_geometry_director.gd')) {
     if (Test-Path (Join-Path $Root $Forbidden)) { throw "Forbidden generated/obsolete path committed: $Forbidden" }
 }
 
@@ -127,12 +127,20 @@ foreach ($Autoload in @(
     'SeasonSave="*res://scripts/season_save.gd"','SeasonDirector="*res://scripts/season_director.gd"',
     'MatchSubstitutionDirector="*res://scripts/match_substitution_director.gd"','ConditionDirector="*res://scripts/condition_director.gd"',
     'FatigueDirector="*res://scripts/fatigue_director.gd"','CourtHazardDirector="*res://scripts/court_hazard_director.gd"',
-    'CourtGeometryDirector="*res://scripts/court_geometry_director.gd"','FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"',
-    'ReplayGuardDirector="*res://scripts/replay_guard_director.gd"','FoulLedgerDirector="*res://scripts/foul_ledger_director.gd"',
-    'SeasonEndDirector="*res://scripts/season_end_director.gd"','ManagementSummaryDirector="*res://scripts/management_summary_director.gd"',
-    'StandingsSummaryDirector="*res://scripts/standings_summary_director.gd"'
+    'FixtureSimulationDirector="*res://scripts/fixture_simulation_director.gd"','ReplayGuardDirector="*res://scripts/replay_guard_director.gd"',
+    'FoulLedgerDirector="*res://scripts/foul_ledger_director.gd"','SeasonEndDirector="*res://scripts/season_end_director.gd"',
+    'ManagementSummaryDirector="*res://scripts/management_summary_director.gd"','StandingsSummaryDirector="*res://scripts/standings_summary_director.gd"'
 )) { if (-not $ProjectText.Contains($Autoload)) { throw "Missing autoload: $Autoload" } }
-if ($ProjectText.Contains('DisciplinePolicyDirector')) { throw 'Obsolete DisciplinePolicyDirector autoload must remain removed.' }
+foreach ($ObsoleteAutoload in @('DisciplinePolicyDirector','CourtGeometryDirector')) { if ($ProjectText.Contains($ObsoleteAutoload)) { throw "Obsolete autoload must remain removed: $ObsoleteAutoload" } }
+
+$MainText = Get-Content -Raw (Join-Path $Root 'scripts/main.gd')
+foreach ($Token in @(
+    'const CourtGeometryRules = preload','var court_rect := COURT','court_rect = CourtGeometryRules.movement_rect(COURT, court)',
+    'TeamPlayRules.support_target(i,home,court_rect)','CourtGeometryRules.clamp_player(point,court_rect,12.0)',
+    'ball_position=court_rect.get_center()','ball_position.x<court_rect.position.x+BALL_RADIUS','court_rect.size.y*0.192',
+    'Vector2(court_rect.position.x+18,court_rect.get_center().y)','draw_rect(court_rect','_formation_positions(true)','_formation_positions(false)'
+)) { if (-not $MainText.Contains($Token)) { throw "Main match missing source-owned court geometry token: $Token" } }
+if ($MainText.Contains('CourtGeometryDirector')) { throw 'Main match must not depend on CourtGeometryDirector.' }
 
 $DisciplineRulesText = Get-Content -Raw (Join-Path $Root 'scripts/discipline_rules.gd')
 foreach ($Token in @('DEFAULT_BOOKING_THRESHOLD := 3','DEFAULT_SUSPENSION_LENGTH := 1','booking_threshold_override','suspension_length_override','total - threshold')) { if (-not $DisciplineRulesText.Contains($Token)) { throw "Discipline rules missing source-owned policy token: $Token" } }
@@ -165,8 +173,6 @@ $HazardDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_hazard_di
 foreach ($Token in @('low_friction','fast_walls','narrow_sidelines','wall_rebound')) { if (-not $HazardDirectorText.Contains($Token)) { throw "Court hazard director missing token: $Token" } }
 $GeometryRulesText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_rules.gd')
 foreach ($Token in @('REFERENCE_WIDTH','REFERENCE_HEIGHT','movement_rect','clamp_player')) { if (-not $GeometryRulesText.Contains($Token)) { throw "Court geometry rules missing token: $Token" } }
-$GeometryDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/court_geometry_director.gd')
-foreach ($Token in @('CourtGeometryRules.movement_rect','CourtGeometryRules.clamp_player','home_players','away_players')) { if (-not $GeometryDirectorText.Contains($Token)) { throw "Court geometry director missing token: $Token" } }
 $FixtureRulesText = Get-Content -Raw (Join-Path $Root 'scripts/fixture_simulation_rules.gd')
 foreach ($Token in @('deterministic_score','simulate_fixture','fixture_needs_simulation','team_played')) { if (-not $FixtureRulesText.Contains($Token)) { throw "Fixture simulation rules missing token: $Token" } }
 $FixtureDirectorText = Get-Content -Raw (Join-Path $Root 'scripts/fixture_simulation_director.gd')
