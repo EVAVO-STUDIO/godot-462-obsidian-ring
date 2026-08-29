@@ -73,10 +73,12 @@ func _test_match_long_injury_ledger() -> void:
 		return
 	var source := condition_file.get_as_text()
 	_expect(source.contains("var _injury_seconds_by_id: Dictionary = {}"), "condition director should retain a match-long injury severity ledger")
-	_expect(source.contains("_capture_user_injuries(scene.get(\"home_players\"))"), "user injuries should be sampled continuously while players are active")
+	_expect(source.contains("_capture_injuries(home_players)"), "home injuries should be sampled continuously")
+	_expect(source.contains("_capture_injuries(away_players)"), "opponent injuries should persist symmetrically")
 	_expect(source.contains('if injury_seconds > float(_injury_seconds_by_id.get(id, 0.0))'), "injury ledger should retain the maximum observed severity rather than the countdown remainder")
 	_expect(source.contains('var injury_matches := clampi(int(ceil(injury_seconds / 6.0)), 1, 3)'), "ledger should convert maximum injury severity to the canonical 1-3 match scale")
 	_expect(source.contains('spec["injury_matches"] = maxi(int(spec.get("injury_matches", 0)), injury_matches)'), "ledger persistence must never shorten an existing career injury")
+	_expect(not source.contains("is_user_roster"), "injury persistence must not give AI teams a hidden immunity")
 	var main_file := FileAccess.open("res://scripts/main.gd", FileAccess.READ)
 	_expect(main_file != null, "main.gd should remain readable for final-active injury fallback")
 	if main_file != null:
