@@ -18,7 +18,8 @@ func _initialize() -> void:
 		print("Obsidian Ring discipline policy self-test passed.")
 		quit(0)
 		return
-	for failure in failures: push_error(failure)
+	for failure in failures:
+		push_error(failure)
 	quit(1)
 
 func _test_default_policy() -> void:
@@ -41,7 +42,8 @@ func _test_custom_policy() -> void:
 func _test_policy_ownership() -> void:
 	var project := FileAccess.open("res://project.godot", FileAccess.READ)
 	_expect(project != null, "project.godot should be readable")
-	if project != null: _expect(not project.get_as_text().contains("DisciplinePolicyDirector"), "obsolete policy autoload must remain removed")
+	if project != null:
+		_expect(not project.get_as_text().contains("DisciplinePolicyDirector"), "obsolete policy autoload must remain removed")
 	_expect(not FileAccess.file_exists("res://scripts/discipline_policy_director.gd"), "obsolete discipline policy file must remain deleted")
 	var season_file := FileAccess.open("res://scripts/season_director.gd", FileAccess.READ)
 	_expect(season_file != null, "season director should be readable")
@@ -66,16 +68,23 @@ func _test_management_summary() -> void:
 	var line := ManagementSummaryRules.player_line(player)
 	_expect(line.contains("IKA") and line.contains("INJ 1") and line.contains("SUSP 2") and line.contains("BOOK 3") and line.contains("FAT 14"), "management summary should expose selected player condition")
 	var opponent := {"team_id":"quetzal_runners","players":[
-		{"id":"a","injury_matches":0,"suspension_matches":0,"fatigue_carry":8},
-		{"id":"b","injury_matches":2,"suspension_matches":0,"fatigue_carry":12},
-		{"id":"c","injury_matches":0,"suspension_matches":1,"fatigue_carry":20},
-		{"id":"d","injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
-		{"id":"e","injury_matches":0,"suspension_matches":0,"fatigue_carry":10}
+		{"id":"a","name":"TALA","role":"runner","skill":8,"injury_matches":0,"suspension_matches":0,"fatigue_carry":8},
+		{"id":"b","name":"IXA","role":"guard","skill":10,"injury_matches":2,"suspension_matches":0,"fatigue_carry":12},
+		{"id":"c","name":"KIRI","role":"striker","skill":9,"injury_matches":0,"suspension_matches":1,"fatigue_carry":20},
+		{"id":"d","name":"NOMA","role":"guard","skill":7,"injury_matches":0,"suspension_matches":0,"fatigue_carry":0},
+		{"id":"e","name":"SOLA","role":"runner","skill":6,"injury_matches":0,"suspension_matches":0,"fatigue_carry":10}
 	]}
 	var opponent_line := ManagementSummaryRules.opponent_line(opponent, "Quetzal Runners")
 	_expect(opponent_line.contains("VS QUETZAL RUNNERS"), "management summary should identify next opponent")
 	_expect(opponent_line.contains("AVAIL 3/5") and opponent_line.contains("INJ 1") and opponent_line.contains("SUSP 1"), "management summary should expose opponent availability losses")
 	_expect(opponent_line.contains("FAT 10"), "management summary should expose opponent average fatigue")
+	var threat := ManagementSummaryRules.best_available_threat(opponent)
+	_expect(str(threat.get("id", "")) == "a", "scouting must ignore injured/suspended higher-skill players and select best available threat")
+	var scout := ManagementSummaryRules.scout_line(opponent)
+	_expect(scout.contains("TALA") and scout.contains("RUNNER") and scout.contains("SK8") and scout.contains("FAT8"), "scouting line should expose available threat identity, role, skill and fatigue")
+	_expect(scout.contains("FORM"), "scouting line should expose the same roster-strength modifier used by fixture simulation")
+	var unavailable := {"players":[{"id":"x","skill":10,"injury_matches":1},{"id":"y","skill":9,"suspension_matches":1}]}
+	_expect(ManagementSummaryRules.scout_line(unavailable).contains("NO AVAILABLE THREAT"), "scouting should fail safely when no player can participate")
 	var foul := ManagementSummaryRules.foul_line({"round":7,"team":"away","actor_name":"TALA"})
 	_expect(foul.contains("R07") and foul.contains("AWAY") and foul.contains("TALA"), "management summary should expose latest foul actor")
 	_expect(ManagementSummaryRules.postseason_line([], "jaguar_house").contains("JAGUAR HOUSE"), "management summary should expose champion identity")
@@ -91,7 +100,8 @@ func _test_management_summary() -> void:
 		var source := manager_file.get_as_text()
 		_expect(source.contains('has_method("postseason_state")') and source.contains('director.call("postseason_state")'), "management summary should consume public postseason state API")
 		_expect(source.contains("_opponent_roster(scene)"), "management summary should read canonical opponent roster")
-		_expect(source.contains("ManagementSummaryRules.opponent_line"), "management summary should render opponent condition line")
+		_expect(source.contains("ManagementSummaryRules.opponent_line") and source.contains("ManagementSummaryRules.scout_line"), "management summary should render condition and scouting lines")
+		_expect(source.contains('"%s\\n%s\\n%s\\n%s\\n%s"'), "management rail should reserve five compact lines")
 		_expect(not source.contains('get("_semifinal_winners")') and not source.contains('get("_champion_id")'), "management summary must not read private postseason state")
 
 func _test_standings_summary() -> void:
@@ -113,8 +123,8 @@ func _test_standings_summary() -> void:
 	var availability := StandingsSummaryRules.availability(roster)
 	_expect(int(availability.get("available", -1)) == 3 and int(availability.get("injured", -1)) == 1 and int(availability.get("suspended", -1)) == 1, "standings availability should use canonical injury/suspension state")
 	_expect(StandingsSummaryRules.availability_code(roster) == " A3/5", "standings should expose compact availability marker")
-	var line := StandingsSummaryRules.row_line(rows[0], 1, "jaguar_house", roster)
-	_expect(line.begins_with(">1") and line.contains("P05") and line.contains("D+06") and line.contains("10") and line.contains("A3/5"), "standings row should expose rank, performance and availability")
+	var row_line := StandingsSummaryRules.row_line(rows[0], 1, "jaguar_house", roster)
+	_expect(row_line.begins_with(">1") and row_line.contains("P05") and row_line.contains("D+06") and row_line.contains("10") and row_line.contains("A3/5"), "standings row should expose rank, performance and availability")
 	_expect(StandingsSummaryRules.playoff_cutoff_line(4, 4) == "PLAYOFF CUT: TOP 4", "standings should expose authored playoff cutoff")
 	var director_file := FileAccess.open("res://scripts/standings_summary_director.gd", FileAccess.READ)
 	_expect(director_file != null, "standings director should be readable")
@@ -125,4 +135,5 @@ func _test_standings_summary() -> void:
 		_expect(source.contains("StandingsSummaryRules.row_line(row, i + 1, \"jaguar_house\", _roster_for_team"), "standings rows should render availability from canonical roster")
 
 func _expect(condition: bool, message: String) -> void:
-	if not condition: failures.append(message)
+	if not condition:
+		failures.append(message)
