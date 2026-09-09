@@ -1,0 +1,11 @@
+{
+  "schema": "evavo_boot_lock_v2",
+  "source_repository": "EVAVO-STUDIO/evavo-game-runtime",
+  "source_commit": "0554446f74e6f5764b969e73f1dd453c7242837b",
+  "package_tree_sha": "cee4c86bc41bcbd76141e1cc2fd02f9d0b45da16",
+  "package_sha256": "",
+  "boot_scene": "res://addons/evavo_boot/evavo_boot.tscn",
+  "game_main_scene": "res://scenes/main.tscn",
+  "splash_mode": "auto",
+  "native_boot_bridge": "dark_no_engine_logo"
+}

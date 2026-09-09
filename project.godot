@@ -4,7 +4,16 @@ config_version=5
 
 [application]
 config/name="Obsidian Ring"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://addons/evavo_boot/evavo_boot.tscn"
+boot_splash/show_image=false
+boot_splash/image=""
+boot_splash/bg_color=Color(0.066, 0.071, 0.078, 1)
+boot_splash/minimum_display_time=0
+
+[evavo]
+boot/game_main_scene="res://scenes/main.tscn"
+boot/splash_mode="auto"
+boot/preload_game_scene=true
 
 [autoload]
 SeasonSave="*res://scripts/season_save.gd"
